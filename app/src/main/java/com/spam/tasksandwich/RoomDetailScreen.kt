@@ -1,0 +1,253 @@
+package com.spam.tasksandwich
+
+
+
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.spam.tasksandwich.ui.theme.TaskSandwichTheme
+
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.input.pointer.pointerInput
+
+
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun RoomDetailScreen(
+    roomId: String,
+    onNavigateBack: () -> Unit,
+    onEditRoomClick: () -> Unit,
+    onCreateShopClick: () -> Unit,
+    onViewShopClick: () -> Unit,
+    viewModel: RoomDetailViewModel = viewModel()
+) {
+    val uiState by viewModel.uiState.collectAsState()
+    var memberToKick by remember { mutableStateOf<RoomMember?>(null) }
+
+    // --- NEW: Confirmation Dialog ---
+    if (memberToKick != null) {
+        AlertDialog(
+            onDismissRequest = { memberToKick = null }, // Dismiss if user clicks outside
+            title = { Text("Kick Member") },
+            text = { Text("Are you sure you want to kick ${memberToKick!!.name} from the room?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.kickMember(memberToKick!!.userId)
+                        memberToKick = null // Close the dialog
+                    }
+                ) {
+                    Text("Yes, Kick")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { memberToKick = null }) {
+                    Text("No, Cancel")
+                }
+            }
+        )
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(uiState.roomName) },
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Go Back"
+                        )
+                    }
+                }
+            )
+        }
+    ) { paddingValues ->
+        // Handle the loading state first
+        if (uiState.isLoading) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator()
+            }
+        } else {
+            // Main content column
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+                    .padding(horizontal = 16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceAround,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    InfoBox(label = "Members", value = uiState.memberCount.toString())
+                    InfoBox(label = "Room Code", value = uiState.joinCode, isPrimary = true)
+                    InfoBox(label = "Earnable Pts", value = uiState.totalEarnablePoints.toString())
+                }
+
+
+                // Join Code Display //todo this will turn member count room code and earnable pts into cards
+//                Text("Room Code", style = MaterialTheme.typography.titleMedium)
+//                Card(modifier = Modifier.padding(8.dp)) {
+//                    Text(
+//                        text = uiState.joinCode,
+//                        style = MaterialTheme.typography.headlineLarge,
+//                        fontWeight = FontWeight.Bold,
+//                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
+//                    )
+//                }
+                Button(
+                    onClick = onViewShopClick,
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
+                ) {
+                    Text("View Room Shop")
+                }
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // LEADERBOARD
+                Text("Leaderboard", style = MaterialTheme.typography.titleLarge)
+                Spacer(modifier = Modifier.height(8.dp))
+
+                LazyColumn(
+                    modifier = Modifier.weight(1f), // Allow the list to take up available space
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Use itemsIndexed to get both the index (for rank) and the member data
+                    itemsIndexed(uiState.members) { index, member ->
+                        MemberListItem(
+                            rank = index + 1, // Rank is the index plus one
+                            member = member,
+                            onLongPress = {
+                                memberToKick = member
+                            }
+                        )
+                    }
+                }
+                // Admin Buttons
+                if (uiState.isAdmin) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Button(onClick = onEditRoomClick, modifier = Modifier.fillMaxWidth()) {
+                        Text("Assign Tasks")
+                    }
+                    OutlinedButton(onClick = onCreateShopClick, modifier = Modifier.fillMaxWidth()) {
+                        Text("Create Shop")
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+            }
+
+        }
+    }
+}@Composable
+fun InfoBox(label: String, value: String, isPrimary: Boolean = false) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            text = value,
+            style = if (isPrimary) MaterialTheme.typography.headlineMedium else MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold
+        )
+    }
+}
+
+/**
+ * A composable that displays a single member in the room list.
+ */
+@Composable
+fun MemberListItem(
+    rank: Int,
+    member: RoomMember,
+    onLongPress: () -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            // --- NEW: Gesture Detection ---
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onLongPress = { onLongPress() }
+                    // You can also add other gestures here like onPress, onDoubleTap, etc.
+                )
+            }
+
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Rank
+            Text(
+                "#$rank",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.width(40.dp) // Give it a fixed width for alignment
+            )
+            // Name
+            Text(
+                member.name,
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.weight(1f) // Name takes up the remaining space
+            )
+            // Points
+            Text(
+                "${member.totalPointsInGroup} pts",
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+    }
+}

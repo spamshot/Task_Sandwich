@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "100048922957",
+    "project_id": "task-sandwich",
+    "storage_bucket": "task-sandwich.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:100048922957:android:f89f2162738bb95846af04",
+        "android_client_info": {
+          "package_name": "com.spam.tasksandwich"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAwejTlDVL-ClvYNxA3MLAK2w2JNU87n-I"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
