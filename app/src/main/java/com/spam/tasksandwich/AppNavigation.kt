@@ -28,7 +28,7 @@ sealed class Screen(val route: String) {
     object JoinRoom : Screen("join_room_screen")
     object ProfileSettings : Screen("profile_settings_screen")
     object TaskSettings : Screen("task_settings_screen")
-//    object CreateRoom : Screen("create_room_screen")
+    object CreateRoom : Screen("create_room_screen")
 
 
     object AssignTask : Screen("assign_task_screen/{roomId}") {

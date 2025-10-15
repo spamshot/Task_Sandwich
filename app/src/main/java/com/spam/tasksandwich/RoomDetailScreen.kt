@@ -49,6 +49,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.pointer.pointerInput
 
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.LaunchedEffect
 
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -63,6 +69,7 @@ fun RoomDetailScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var memberToKick by remember { mutableStateOf<RoomMember?>(null) }
+    var showEditRoomDialog by remember { mutableStateOf(false) }
 
     // --- NEW: Confirmation Dialog ---
     if (memberToKick != null) {
@@ -88,6 +95,31 @@ fun RoomDetailScreen(
         )
     }
 
+    // This effect will navigate back when the ViewModel signals the room is deleted.
+    LaunchedEffect(uiState.isRoomDeleted) {
+        if (uiState.isRoomDeleted) {
+            onNavigateBack()
+        }
+    }
+
+    // --- NEW: The Edit Room Dialog ---
+    if (showEditRoomDialog) {
+        EditRoomDialog(
+            currentRoomName = uiState.roomName,
+            onDismiss = { showEditRoomDialog = false },
+            onSave = { newName ->
+                viewModel.updateRoomName(newName)
+                showEditRoomDialog = false
+            },
+            onDelete = {
+                viewModel.deleteRoom()
+                showEditRoomDialog = false
+            }
+        )
+    }
+
+
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -98,10 +130,16 @@ fun RoomDetailScreen(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Go Back"
                         )
+                    } },
+                    actions = {
+                        if (uiState.isAdmin) {
+                            IconButton(onClick = { showEditRoomDialog = true }) {
+                                Icon(Icons.Default.Edit, contentDescription = "Edit Room")
+                            }
+                        }
                     }
+                    )
                 }
-            )
-        }
     ) { paddingValues ->
         // Handle the loading state first
         if (uiState.isLoading) {
@@ -251,3 +289,53 @@ fun MemberListItem(
         }
     }
 }
+
+/**
+ * A new, dedicated composable for the Edit Room dialog.
+ */
+@Composable
+fun EditRoomDialog(
+    currentRoomName: String,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit,
+    onDelete: () -> Unit
+) {
+    var roomName by remember { mutableStateOf(currentRoomName) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Edit Room") },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = roomName,
+                    onValueChange = { roomName = it },
+                    label = { Text("Room Name") },
+                    singleLine = true
+                )
+                Spacer(Modifier.height(16.dp))
+                // The delete button is placed inside the dialog
+                Button(
+                    onClick = onDelete,
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Delete This Room")
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onSave(roomName) },
+                enabled = roomName.isNotBlank() && roomName != currentRoomName
+            ) {
+                Text("Save")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+

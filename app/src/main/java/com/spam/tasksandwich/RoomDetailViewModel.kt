@@ -33,7 +33,8 @@ data class RoomDetailUiState(
     val totalEarnablePoints: Int = 0,
     val isAdmin: Boolean = false,
     val isLoading: Boolean = true,
-    val error: String? = null
+    val error: String? = null,
+    val isRoomDeleted: Boolean = false,
 )
 
 class RoomDetailViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
@@ -52,6 +53,38 @@ class RoomDetailViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
             fetchRoomDetails()
             listenForMembers()
             listenForTasks()
+        }
+    }
+
+    fun updateRoomName(newName: String) {
+        if (newName.isBlank()) {
+            _uiState.update { it.copy(error = "Room name cannot be empty.") }
+            return
+        }
+        viewModelScope.launch {
+            try {
+                db.collection("groups").document(roomId).update("name", newName).await()
+                // The listener will update the UI. We also need to update all user docs.
+                // This is complex, so for now we accept the home screen might show an old name
+                // until the app is restarted or the user rejoins.
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = "Failed to update name: ${e.message}") }
+            }
+        }
+    }
+
+    fun deleteRoom() {
+        viewModelScope.launch {
+            try {
+                // Simplified delete: only removes the main group document.
+                // A full implementation requires a Cloud Function to clean up subcollections.
+                db.collection("groups").document(roomId).delete().await()
+
+                // Signal to the UI that the room is gone and it should navigate away.
+                _uiState.update { it.copy(isRoomDeleted = true) }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = "Failed to delete room: ${e.message}") }
+            }
         }
     }
 
