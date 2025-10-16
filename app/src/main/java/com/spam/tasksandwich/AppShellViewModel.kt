@@ -14,7 +14,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 
 data class AppShellUiState(
-    val newlyCreatedRoomId: String? = null
+    val newlyCreatedRoomId: String? = null,
+    val newlyJoinedRoomId: String? = null,
+    val error: String? = null
 )
 
 /**
@@ -27,6 +29,63 @@ class AppShellViewModel : ViewModel() {
 
     private val _uiState = MutableStateFlow(AppShellUiState())
     val uiState = _uiState.asStateFlow()
+
+    fun joinRoom(joinCode: String) {
+        val currentUser = auth.currentUser
+        if (currentUser == null) {
+            _uiState.update { it.copy(error = "You must be logged in.") }
+            return
+        }
+        if (joinCode.length != 6) {
+            _uiState.update { it.copy(error = "Please enter a valid 6-digit code.") }
+            return
+        }
+
+        viewModelScope.launch {
+            try {
+                // Find the group with the matching join code
+                val groupQuery = db.collection("groups")
+                    .whereEqualTo("joinCode", joinCode)
+                    .limit(1).get().await()
+
+                if (groupQuery.isEmpty) {
+                    _uiState.update { it.copy(error = "Invalid room code.") }
+                    return@launch
+                }
+
+                val groupDoc = groupQuery.documents.first()
+                val groupId = groupDoc.id
+                val groupRef = db.collection("groups").document(groupId)
+
+                // Add user to the groupMembers subcollection
+                val newMemberData = hashMapOf(
+                    "userId" to currentUser.uid, "role" to "member", "status" to "approved",
+                    "totalPointsInGroup" to 0, "joinedAt" to Timestamp.now()
+                )
+                groupRef.collection("groupMembers").document(currentUser.uid).set(newMemberData).await()
+
+                // Add the room to the user's personal profile
+                val userRef = db.collection("users").document(currentUser.uid)
+                val roomInfo = hashMapOf("groupId" to groupId, "groupName" to groupDoc.getString("name"))
+                userRef.update("groupsJoined", FieldValue.arrayUnion(roomInfo)).await()
+
+                // Signal success to the UI with the groupId
+                _uiState.update { it.copy(newlyJoinedRoomId = groupId, error = null) }
+
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = "An error occurred: ${e.message}") }
+            }
+        }
+    }
+
+    // --- NEW FUNCTION TO CLEAR ERROR ---
+    fun clearError() {
+        _uiState.update { it.copy(error = null) }
+    }
+
+    fun onRoomNavigationHandled() { // Rename for clarity
+        _uiState.update { it.copy(newlyCreatedRoomId = null, newlyJoinedRoomId = null) }
+    }
 
     /**
      * Creates a new room in Firestore. This is a comprehensive operation that:

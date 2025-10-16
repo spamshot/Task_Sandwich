@@ -116,13 +116,13 @@ sealed class Screen(val route: String) {
                 )
             }
 
-            composable(Screen.JoinRoom.route) {
-                JoinRoomScreen(onJoinSuccess = { roomId ->
-                    navController.navigate(Screen.RoomDetail.createRoute(roomId)) {
-                        popUpTo(Screen.JoinRoom.route) { inclusive = true }
-                    }
-                })
-            }
+//            composable(Screen.JoinRoom.route) {
+//                JoinRoomScreen(onJoinSuccess = { roomId ->
+//                    navController.navigate(Screen.RoomDetail.createRoute(roomId)) {
+//                        popUpTo(Screen.JoinRoom.route) { inclusive = true }
+//                    }
+//                })
+//            }
 
 //            composable(Screen.CreateRoom.route) {
 //                CreateRoomScreen(
