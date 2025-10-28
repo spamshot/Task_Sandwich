@@ -1,5 +1,6 @@
 package com.spam.tasksandwich
 
+import com.google.firebase.Timestamp
 /**
  * Represents the user's core profile information.
  * Used in the HomeScreen and fetched from the 'users' collection.
@@ -29,7 +30,8 @@ data class Task(
     val points: Int = 0,
     val assignedByName: String = "Someone",
     val repeatOption: String = "Never",
-    val groupId: String? = null
+    val groupId: String? = null,
+    val dueDate: Timestamp? = null
 )
 
 /**

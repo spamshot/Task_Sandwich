@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import java.util.UUID
+import java.util.Calendar
 
 data class AssignTaskUiState(
     val isLoading: Boolean = true,
@@ -69,7 +70,13 @@ class AssignTaskViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
             }
     }
 
-    fun saveTask(title: String, pointsStr: String, repeatOption: String, assignedTo: RoomMember?) {
+    fun saveTask(
+        title: String,
+        pointsStr: String,
+        repeatOption: String,
+        assignedTo: RoomMember?,
+        expiresInDays: Int
+    ) {
         val currentUser = auth.currentUser
         val adminName = uiState.value.members.find { it.userId == currentUser?.uid }?.name ?: "Admin"
 
@@ -88,6 +95,13 @@ class AssignTaskViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
         _uiState.update { it.copy(isSaving = true, error = null) }
         viewModelScope.launch {
             try {
+                var dueDate: Timestamp? = null
+                if (expiresInDays > 0) {
+                    val calendar = Calendar.getInstance()
+                    calendar.add(Calendar.DAY_OF_YEAR, expiresInDays)
+                    dueDate = Timestamp(calendar.time)
+                }
+
                 // Determine if we're assigning to one person or many
                 val membersToAssign = if (assignedTo.userId == "all") {
                     // Filter out the "All Members" placeholder
@@ -96,6 +110,7 @@ class AssignTaskViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
                     // Create a list with just the single selected member
                     listOf(assignedTo)
                 }
+
 
                 // --- BUG FIX ---
                 // Create a single, unique ID for this batch of assignments.
@@ -117,7 +132,8 @@ class AssignTaskViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
                         "status" to "assigned",
                         "isPersonal" to false,
                         "sharedTaskId" to sharedTaskId, // Add the shared ID to each task
-                        "createdAt" to Timestamp.now()
+                        "createdAt" to Timestamp.now(),
+                        "dueDate" to dueDate
                     )
                     batch.set(newTaskRef, taskData)
                 }

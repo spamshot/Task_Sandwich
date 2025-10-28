@@ -8,7 +8,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
@@ -25,31 +27,49 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AssignTaskScreen(
-    onTaskSaved: () -> Unit,
+    onTaskSaved: () -> Unit, // This is used for the "Go Back" action in the TopAppBar
     viewModel: AssignTaskViewModel = viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
+    // --- State for input fields ---
     var title by rememberSaveable { mutableStateOf("") }
     var points by rememberSaveable { mutableStateOf("") }
+
+    // --- State for "Repeat" dropdown ---
     val repeatOptions = listOf("Never", "Every Day", "Once a Week", "Once a Month")
     var selectedRepeatOption by rememberSaveable { mutableStateOf(repeatOptions[0]) }
-
-    //stat for drop down 2
     var isRepeatDropdownExpanded by remember { mutableStateOf(false) }
 
+    // --- State for "Expires In" dropdown ---
+    val expiresInOptions = listOf(
+        "Never" to 0, "1 Day" to 1, "2 Days" to 2, "3 Days" to 3,
+        "4 Days" to 4, "5 Days" to 5, "6 Days" to 6, "7 Days" to 7
+    )
+    var selectedExpiration by rememberSaveable { mutableStateOf(expiresInOptions[0]) }
+    var isExpirationDropdownExpanded by remember { mutableStateOf(false) }
 
-    // State for the new dropdown
+    // --- State for "Assign To" dropdown ---
     var isAssigneeDropdownExpanded by remember { mutableStateOf(false) }
     var selectedAssignee by remember { mutableStateOf<RoomMember?>(null) }
-
-    // Create the list for the dropdown, including the "All Members" option
     val assigneeOptions = remember(uiState.members) {
         listOf(RoomMember(userId = "all", name = "All Members")) + uiState.members
     }
 
+    // --- Business Logic in UI ---
+    // The expiration dropdown is only enabled if the task does not repeat.
+    val isExpirationEnabled = selectedRepeatOption == "Never"
+
+    // This effect ensures that if a user selects a repeating task, the expiration is reset to "Never".
+    LaunchedEffect(selectedRepeatOption) {
+        if (!isExpirationEnabled) {
+            selectedExpiration = expiresInOptions[0]
+        }
+    }
+
+    // This effect shows a snackbar and clears the form upon successful save.
     LaunchedEffect(uiState.saveSuccess) {
         if (uiState.saveSuccess) {
             scope.launch { snackbarHostState.showSnackbar("Task(s) assigned successfully!") }
@@ -57,6 +77,8 @@ fun AssignTaskScreen(
             title = ""
             points = ""
             selectedAssignee = null
+            selectedRepeatOption = repeatOptions[0]
+            selectedExpiration = expiresInOptions[0]
         }
     }
 
@@ -80,7 +102,8 @@ fun AssignTaskScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
-                    .padding(16.dp),
+                    .padding(16.dp)
+                    .verticalScroll(rememberScrollState()), // Makes the form scrollable
             ) {
                 OutlinedTextField(
                     value = title,
@@ -92,7 +115,6 @@ fun AssignTaskScreen(
 
                 OutlinedTextField(
                     value = points,
-                    // --- FIX 1: Corrected the typo ---
                     onValueChange = { points = it },
                     label = { Text("Points") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -111,9 +133,7 @@ fun AssignTaskScreen(
                         readOnly = true,
                         label = { Text("Repeat") },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = isRepeatDropdownExpanded) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .menuAnchor()
+                        modifier = Modifier.fillMaxWidth().menuAnchor()
                     )
                     ExposedDropdownMenu(
                         expanded = isRepeatDropdownExpanded,
@@ -132,6 +152,37 @@ fun AssignTaskScreen(
                 }
                 Spacer(Modifier.height(16.dp))
 
+                // Expires In Dropdown
+                ExposedDropdownMenuBox(
+                    expanded = isExpirationDropdownExpanded,
+                    onExpandedChange = { if (isExpirationEnabled) isExpirationDropdownExpanded = it }
+                ) {
+                    OutlinedTextField(
+                        value = selectedExpiration.first,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Expires In") },
+                        enabled = isExpirationEnabled, // Visually grays out if disabled
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = isExpirationDropdownExpanded) },
+                        modifier = Modifier.fillMaxWidth().menuAnchor()
+                    )
+                    ExposedDropdownMenu(
+                        expanded = isExpirationDropdownExpanded,
+                        onDismissRequest = { isExpirationDropdownExpanded = false }
+                    ) {
+                        expiresInOptions.forEach { option ->
+                            DropdownMenuItem(
+                                text = { Text(option.first) },
+                                onClick = {
+                                    selectedExpiration = option
+                                    isExpirationDropdownExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+                Spacer(Modifier.height(16.dp))
+
                 // Assignee Dropdown
                 ExposedDropdownMenuBox(
                     expanded = isAssigneeDropdownExpanded,
@@ -143,11 +194,8 @@ fun AssignTaskScreen(
                         readOnly = true,
                         label = { Text("Assign To") },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = isAssigneeDropdownExpanded) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .menuAnchor()
+                        modifier = Modifier.fillMaxWidth().menuAnchor()
                     )
-                    // --- FIX 2: Used the correct state variable ---
                     ExposedDropdownMenu(
                         expanded = isAssigneeDropdownExpanded,
                         onDismissRequest = { isAssigneeDropdownExpanded = false }
@@ -164,11 +212,21 @@ fun AssignTaskScreen(
                     }
                 }
 
+                // Spacer to push the button to the bottom
                 Spacer(Modifier.weight(1f))
 
                 Button(
-                    onClick = { viewModel.saveTask(title, points, selectedRepeatOption, selectedAssignee) },
-                    enabled = !uiState.isSaving && selectedAssignee != null,
+                    onClick = {
+                        viewModel.saveTask(
+                            title = title,
+                            pointsStr = points,
+                            repeatOption = selectedRepeatOption,
+                            assignedTo = selectedAssignee,
+                            expiresInDays = selectedExpiration.second
+                        )
+
+                    },
+                    enabled = !uiState.isSaving && selectedAssignee != null && title.isNotBlank() && points.isNotBlank(),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     if (uiState.isSaving) CircularProgressIndicator(Modifier.size(24.dp)) else Text("Assign Task")

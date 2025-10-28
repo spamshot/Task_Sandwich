@@ -17,7 +17,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
-
+import kotlinx.coroutines.delay
+import com.google.firebase.Timestamp
+import java.util.concurrent.TimeUnit
 
 
 @Composable
@@ -249,15 +251,81 @@ fun AssignerTaskGroup(
 @Composable
 fun TaskItem(task: Task, onCompleteClick: () -> Unit) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(task.title, style = MaterialTheme.typography.bodyLarge)
-            Text("${task.points} Points", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+            Text(
+                "${task.points} Points",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary
+            )
+            // Add the new CountdownTimer composable here
+            CountdownTimer(dueDate = task.dueDate)
         }
         Button(onClick = onCompleteClick) {
             Text("Done")
         }
+    }
+}
+
+// --- NEW: Countdown Timer Composable ---
+/**
+ * A self-updating composable that displays the time remaining until a due date.
+ * It recomposes itself every minute to show a live countdown.
+ */
+@Composable
+fun CountdownTimer(dueDate: Timestamp?) {
+    // If there's no due date, compose nothing.
+    if (dueDate == null) return
+
+    // This state holds the *current* time, and we'll update it on a timer.
+    var now by remember { mutableStateOf(System.currentTimeMillis()) }
+
+    // This is the core of the timer. LaunchedEffect runs a coroutine that
+    // can be suspended without blocking the UI.
+    LaunchedEffect(Unit) {
+        while (true) {
+            // Wait for one minute. (delay is a suspend function)
+            delay(60_000L) // 60,000 milliseconds = 1 minute
+            // Update the 'now' state, which will trigger a recomposition of this composable.
+            now = System.currentTimeMillis()
+        }
+    }
+
+    // Calculate the formatted duration string based on the current time.
+    val timeLeftString = formatDuration(now, dueDate.toDate().time)
+
+    Text(
+        text = timeLeftString,
+        style = MaterialTheme.typography.bodySmall,
+        fontWeight = FontWeight.Bold,
+        // Use a different color to indicate status
+        color = if (timeLeftString == "Expired") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+    )
+}
+
+// --- NEW: Helper Function for Formatting ---
+/**
+ * Formats a duration in milliseconds into a human-readable string like "2d 5h left".
+ */
+private fun formatDuration(now: Long, future: Long): String {
+    val diff = future - now
+    if (diff <= 0) {
+        return "Expired"
+    }
+
+    val days = TimeUnit.MILLISECONDS.toDays(diff)
+    val hours = TimeUnit.MILLISECONDS.toHours(diff) % 24
+    val minutes = TimeUnit.MILLISECONDS.toMinutes(diff) % 60
+
+    return when {
+        days > 0 -> "${days}d ${hours}h left"
+        hours > 0 -> "${hours}h ${minutes}m left"
+        minutes > 0 -> "${minutes}m left"
+        else -> "< 1m left"
     }
 }
