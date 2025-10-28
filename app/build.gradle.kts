@@ -68,10 +68,10 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.9.4")
 
     // Navigation for moving between screens
-    implementation("androidx.navigation:navigation-compose:2.9.4")
+    implementation("androidx.navigation:navigation-compose:2.9.5")
 
     // Firebase Bill of Materials (BoM) - This handles versions for other Firebase libs
-    implementation(platform("com.google.firebase:firebase-bom:34.3.0"))
+    implementation(platform("com.google.firebase:firebase-bom:34.4.0"))
 
     // Firebase Authentication
 //    implementation("com.google.firebase:firebase-auth")

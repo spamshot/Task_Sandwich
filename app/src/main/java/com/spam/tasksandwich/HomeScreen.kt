@@ -111,10 +111,16 @@ fun HomeDashboard(
 }
 @Composable
 fun RoomCard(room: UserRoom, onClick: () -> Unit) {
+    val cardColors = if (room.isAdmin) {
+        CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+    } else {
+        CardDefaults.cardColors()
+    }
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
+        colors = cardColors,
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Row(
@@ -133,7 +139,7 @@ fun RoomCard(room: UserRoom, onClick: () -> Unit) {
                 text = "${room.userPointsInRoom} pts",
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
+                color = if (room.isAdmin) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.primary
             )
         }
     }
@@ -167,36 +173,11 @@ fun EmptyStateProfile(
 
         // Action Buttons Section
         Text(
-            "What would you like to do?",
+            "No task for today? Let's add one from settings!",
             style = MaterialTheme.typography.titleMedium
         )
         Spacer(modifier = Modifier.height(24.dp))
 
-        // Button to Add a Self-Assigned Task
-        Button(
-            onClick = onAddTaskClick,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("Add a Personal Task")
-        }
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // Button to Join a Room
-        Button(
-            onClick = onJoinRoomClick,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("Join a Room")
-        }
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // Button to Create a Room
-        Button(
-            onClick = onCreateRoomClick,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("Create a Room")
-        }
     }
 }
 
@@ -238,12 +219,11 @@ fun AssignerTaskGroup(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Tasks from: $assignerName",
+                    text = assignerName, // AssignerName is Room name aka "Room 2"
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.weight(1f)
                 )
-
 
                 Icon(
                     imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
@@ -274,7 +254,7 @@ fun TaskItem(task: Task, onCompleteClick: () -> Unit) {
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(task.title, style = MaterialTheme.typography.bodyLarge)
-            Text("${task.points} Points", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+            Text("${task.points} Points", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
         }
         Button(onClick = onCompleteClick) {
             Text("Done")

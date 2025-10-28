@@ -19,6 +19,10 @@ import androidx.lifecycle.viewModelScope
 
 // Note: All data classes (UserProfile, Task, UserRoom) should be in HomeData.kt
 // and imported at the top of this file.
+import com.spam.tasksandwich.Task
+import com.spam.tasksandwich.UserProfile
+import com.spam.tasksandwich.UserRoom
+
 
 data class HomeUiState(
     val isLoading: Boolean = true,
@@ -37,16 +41,13 @@ class HomeViewModel : ViewModel() {
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState = _uiState.asStateFlow()
 
+    private var userRooms: List<UserRoom> = emptyList()
+    private var userTasks: List<Task> = emptyList()
+
     init {
         loadAllData()
     }
 
-    /**
-     * Loads all necessary data for the home screen from Firestore.
-     * It uses two parallel listeners: one for the user's profile and rooms,
-     * and one for the user's assigned tasks. A loading flag is managed
-     * to ensure the UI waits for both initial loads to complete.
-     */
     private fun loadAllData() {
         _uiState.update { it.copy(isLoading = true) }
         val currentUser = auth.currentUser
@@ -64,8 +65,6 @@ class HomeViewModel : ViewModel() {
             }
         }
 
-        // Listener 1: Fetches user profile data and the list of rooms. For each room,
-        // it then fetches the user's specific point total within that room.
         val userDocRef = db.collection("users").document(currentUser.uid)
         userDocRef.addSnapshotListener { snapshot, error ->
             if (error != null) {
@@ -83,23 +82,37 @@ class HomeViewModel : ViewModel() {
                 viewModelScope.launch {
                     try {
                         val roomJobs = roomsData.map { roomMap ->
-                            this.async {
+                            async {
                                 val groupId = roomMap["groupId"] ?: ""
                                 val groupName = roomMap["groupName"] ?: "Unnamed Room"
                                 var points = 0
+                                var isAdmin = false
+
                                 if (groupId.isNotEmpty()) {
+
+                                   //Checking if your admin
+                                    val groupDoc = db.collection("groups").document(groupId).get().await()
+                                    if (groupDoc.exists()) {
+                                        isAdmin = groupDoc.getString("adminUserId") == currentUser.uid
+                                    }
+
                                     val memberDoc = db.collection("groups").document(groupId)
                                         .collection("groupMembers").document(currentUser.uid)
                                         .get().await()
+
                                     if (memberDoc.exists()) {
                                         points = memberDoc.getLong("totalPointsInGroup")?.toInt() ?: 0
                                     }
                                 }
-                                UserRoom(groupId, groupName, points)
+
+                                UserRoom(groupId, groupName, points, isAdmin)
                             }
                         }
-                        val roomsListWithPoints = roomJobs.awaitAll()
-                        _uiState.update { it.copy(userProfile = user, rooms = roomsListWithPoints) }
+
+                        userRooms = roomJobs.awaitAll()
+                        _uiState.update { it.copy(userProfile = user, rooms = userRooms) }
+                        updateGroupedTasks()
+
                     } catch (e: Exception) {
                         _uiState.update { it.copy(error = "Error loading room points.") }
                     } finally {
@@ -113,10 +126,10 @@ class HomeViewModel : ViewModel() {
             }
         }
 
-        // Listener 2: Fetches tasks assigned to the current user.
         val tasksQuery = db.collection("tasks")
             .whereEqualTo("assignedToUserId", currentUser.uid)
             .whereEqualTo("status", "assigned")
+
         tasksQuery.addSnapshotListener { snapshot, error ->
             if (error != null) {
                 _uiState.update { it.copy(error = "Failed to load tasks.") }
@@ -124,23 +137,36 @@ class HomeViewModel : ViewModel() {
                 checkCompletion()
                 return@addSnapshotListener
             }
+
             if (snapshot != null) {
-                val tasks = snapshot.documents.mapNotNull { doc ->
+                userTasks = snapshot.documents.mapNotNull { doc ->
                     doc.toObject(Task::class.java)?.copy(id = doc.id)
                 }
-                _uiState.update { it.copy(groupedTasks = tasks.groupBy { it.assignedByName }) }
+                updateGroupedTasks()
             }
+
             tasksListenerLoaded = true
             checkCompletion()
         }
     }
 
+    private fun updateGroupedTasks() {
+        val grouped = userTasks.groupBy { task ->
+            val room = userRooms.find { it.groupId == task.groupId }
+            val roomName = room?.groupName ?: "Personal Tasks"
+            "$roomName - from ${task.assignedByName}"
+        }
+        _uiState.update { it.copy(groupedTasks = grouped) }
+    }
+
     fun markTaskComplete(task: Task) {
         val currentUser = auth.currentUser ?: return
+
         viewModelScope.launch {
             try {
                 val batch = db.batch()
                 val taskRef = db.collection("tasks").document(task.id)
+
                 batch.update(taskRef, "status", "completed")
 
                 val userRef = db.collection("users").document(currentUser.uid)
@@ -153,7 +179,9 @@ class HomeViewModel : ViewModel() {
                         batch.update(memberRef, "totalPointsInGroup", FieldValue.increment(task.points.toLong()))
                     }
                 }
+
                 batch.commit().await()
+
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = "Could not complete task: ${e.message}") }
             }
@@ -162,11 +190,14 @@ class HomeViewModel : ViewModel() {
 
     fun createRoom(roomName: String) {
         val currentUser = auth.currentUser ?: return
+
         _uiState.update { it.copy(isLoading = true) }
+
         viewModelScope.launch {
             try {
                 val newRoomRef = db.collection("groups").document()
                 val joinCode = (100000..999999).random().toString()
+
                 val newRoom = hashMapOf(
                     "name" to roomName,
                     "adminUserId" to currentUser.uid,
@@ -174,10 +205,15 @@ class HomeViewModel : ViewModel() {
                     "autoAcceptMembers" to true,
                     "createdAt" to Timestamp.now()
                 )
+
                 val adminMember = hashMapOf(
-                    "userId" to currentUser.uid, "role" to "admin", "status" to "approved",
-                    "totalPointsInGroup" to 0, "joinedAt" to Timestamp.now()
+                    "userId" to currentUser.uid,
+                    "role" to "admin",
+                    "status" to "approved",
+                    "totalPointsInGroup" to 0,
+                    "joinedAt" to Timestamp.now()
                 )
+
                 val userRef = db.collection("users").document(currentUser.uid)
                 val roomInfo = hashMapOf("groupId" to newRoomRef.id, "groupName" to roomName)
 
@@ -186,7 +222,9 @@ class HomeViewModel : ViewModel() {
                     batch.set(newRoomRef.collection("groupMembers").document(currentUser.uid), adminMember)
                     batch.update(userRef, "groupsJoined", FieldValue.arrayUnion(roomInfo))
                 }.await()
+
                 _uiState.update { it.copy(isLoading = false, createdRoomId = newRoomRef.id) }
+
             } catch (e: Exception) {
                 _uiState.update { it.copy(isLoading = false, error = "Failed to create room: ${e.message}") }
             }
@@ -197,55 +235,3 @@ class HomeViewModel : ViewModel() {
         _uiState.update { it.copy(createdRoomId = null) }
     }
 }
-
-
-//fun createRoom(adminRole: String, memberRole: String) {
-//    val currentUser = auth.currentUser ?: return
-//    val userName = _uiState.value.userProfile?.name ?: "Admin"
-//
-//    viewModelScope.launch {
-//        _uiState.update { it.copy(isLoading = true) }
-//        try {
-//            // --- THIS WAS THE MISSING LINE ---
-//            val newRoomRef = db.collection("groups").document()
-//            // ---------------------------------
-//
-//            val joinCode = (100000..999999).random().toString()
-//
-//            val newRoom = hashMapOf(
-//                "name" to "$userName's Room",
-//                "adminUserId" to currentUser.uid,
-//                "joinCode" to joinCode,
-//                "autoAcceptMembers" to true,
-//                "adminRoleName" to adminRole,
-//                "memberRoleName" to memberRole,
-//                "createdAt" to Timestamp.now()
-//            )
-//
-//            val adminMember = hashMapOf(
-//                "userId" to currentUser.uid,
-//                "role" to "admin",
-//                "status" to "approved",
-//                "totalPointsInGroup" to 0,
-//                "joinedAt" to Timestamp.now()
-//            )
-//
-//            val userRef = db.collection("users").document(currentUser.uid)
-//            val roomInfo = hashMapOf(
-//                "groupId" to newRoomRef.id,
-//                "groupName" to newRoom["name"]
-//            )
-//
-//            db.runBatch { batch ->
-//                batch.set(newRoomRef, newRoom)
-//                batch.set(newRoomRef.collection("groupMembers").document(currentUser.uid), adminMember)
-//                batch.update(userRef, "groupsJoined", FieldValue.arrayUnion(roomInfo))
-//            }.await()
-//
-//            _uiState.update { it.copy(isLoading = false, createdRoomId = newRoomRef.id) }
-//
-//        } catch (e: Exception) {
-//            _uiState.update { it.copy(isLoading = false, error = "Failed to create room: ${e.message}") }
-//        }
-//    }
-//}

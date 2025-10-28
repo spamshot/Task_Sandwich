@@ -172,16 +172,6 @@ fun RoomDetailScreen(
                 }
 
 
-                // Join Code Display //todo this will turn member count room code and earnable pts into cards
-//                Text("Room Code", style = MaterialTheme.typography.titleMedium)
-//                Card(modifier = Modifier.padding(8.dp)) {
-//                    Text(
-//                        text = uiState.joinCode,
-//                        style = MaterialTheme.typography.headlineLarge,
-//                        fontWeight = FontWeight.Bold,
-//                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
-//                    )
-//                }
                 Button(
                     onClick = onViewShopClick,
                     modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)

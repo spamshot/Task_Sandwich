@@ -26,7 +26,7 @@ fun ViewShopScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(uiState.roomName) },
+                title = { Text("${uiState.roomName} Shop") },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "Go Back")
@@ -36,22 +36,58 @@ fun ViewShopScreen(
         }
     ) { paddingValues ->
         if (uiState.isLoading) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-        } else {
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(2), // 2-wide grid
+            Box(
                 modifier = Modifier.fillMaxSize().padding(paddingValues),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                contentAlignment = Alignment.Center
             ) {
-                items(uiState.shopItems) { item ->
-                    ShopItemCard(item = item)
-                }
+                CircularProgressIndicator()
             }
+        }
+        // --- THIS IS THE NEW LOGIC ---
+        else if (uiState.shopItems.isEmpty()) {
+            // If the list of items is empty, show the "No Items" message.
+            EmptyShopState(modifier = Modifier.padding(paddingValues))
+        }
+        // -----------------------------
+        else {
+            // If the list has items, show the grid.
+            ShopGrid(
+                items = uiState.shopItems,
+                modifier = Modifier.padding(paddingValues)
+            )
         }
     }
 }
+@Composable
+fun EmptyShopState(modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = "No shop items have been created yet.",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+
+@Composable
+fun ShopGrid(items: List<ShopItem>, modifier: Modifier = Modifier) {
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(2), // 2-wide grid
+        modifier = modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        items(items) { item ->
+            ShopItemCard(item = item)
+        }
+    }
+}
+
 
 @Composable
 fun ShopItemCard(item: ShopItem) {

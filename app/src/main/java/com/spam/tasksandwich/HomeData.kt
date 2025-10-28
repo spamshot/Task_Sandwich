@@ -39,5 +39,6 @@ data class Task(
 data class UserRoom(
     val groupId: String = "",
     val groupName: String = "",
-    val userPointsInRoom: Int = 0
+    val userPointsInRoom: Int = 0,
+    val isAdmin: Boolean = false
 )
