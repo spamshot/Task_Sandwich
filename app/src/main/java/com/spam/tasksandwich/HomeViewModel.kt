@@ -33,7 +33,7 @@ data class HomeUiState(
     val error: String? = null
 )
 
-class HomeViewModel : ViewModel() {
+class HomeViewModel : ViewModel(), RefreshesViewModel {
 
     private val auth = Firebase.auth
     private val db = Firebase.firestore
@@ -129,7 +129,6 @@ class HomeViewModel : ViewModel() {
         val tasksQuery = db.collection("tasks")
             .whereEqualTo("assignedToUserId", currentUser.uid)
             .whereEqualTo("status", "assigned")
-
         tasksQuery.addSnapshotListener { snapshot, error ->
             if (error != null) {
                 _uiState.update { it.copy(error = "Failed to load tasks.") }
@@ -137,7 +136,6 @@ class HomeViewModel : ViewModel() {
                 checkCompletion()
                 return@addSnapshotListener
             }
-
             if (snapshot != null) {
                 userTasks = snapshot.documents.mapNotNull { doc ->
                     doc.toObject(Task::class.java)?.copy(id = doc.id)
@@ -157,6 +155,39 @@ class HomeViewModel : ViewModel() {
             "$roomName - from ${task.assignedByName}"
         }
         _uiState.update { it.copy(groupedTasks = grouped) }
+    }
+
+    override fun onResume() {
+        refreshRoomPoints()
+    }
+
+    private fun refreshRoomPoints() {
+        val currentUser = auth.currentUser ?: return
+        val currentRooms = _uiState.value.rooms
+        if (currentRooms.isEmpty()) return
+
+        viewModelScope.launch {
+            try {
+                val updatedRoomJobs = currentRooms.map { room ->
+                    async {
+                        var updatedPoints = room.userPointsInRoom
+                        if (room.groupId.isNotEmpty()) {
+                            val memberDoc = db.collection("groups").document(room.groupId)
+                                .collection("groupMembers").document(currentUser.uid)
+                                .get().await()
+                            if (memberDoc.exists()) {
+                                updatedPoints = memberDoc.getLong("totalPointsInGroup")?.toInt() ?: 0
+                            }
+                        }
+                        room.copy(userPointsInRoom = updatedPoints)
+                    }
+                }
+                val updatedRoomsList = updatedRoomJobs.awaitAll()
+                _uiState.update { it.copy(rooms = updatedRoomsList) }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = "Failed to refresh room points.") }
+            }
+        }
     }
 
     fun markTaskComplete(task: Task) {

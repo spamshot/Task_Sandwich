@@ -15,6 +15,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import kotlinx.coroutines.delay
@@ -28,6 +31,25 @@ fun HomeScreen(
     homeViewModel: HomeViewModel = viewModel()
 ) {
     val uiState by homeViewModel.uiState.collectAsState()
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            // When the screen RESUMES (i.e., you navigate back to it)
+            if (event == Lifecycle.Event.ON_RESUME) {
+                // Call the refresh function on the ViewModel.
+                homeViewModel.onResume()
+            }
+        }
+
+        lifecycleOwner.lifecycle.addObserver(observer)
+
+        // When the composable is disposed, remove the observer.
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
 
     // This side effect handles the navigation event after a user creates a new room.
     LaunchedEffect(uiState.createdRoomId) {

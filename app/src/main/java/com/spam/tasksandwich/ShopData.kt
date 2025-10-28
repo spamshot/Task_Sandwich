@@ -5,3 +5,15 @@ data class ShopItem(
     val name: String = "",
     val cost: Int = 0
 )
+
+/**
+ * Represents a single purchase record from the 'purchaseLog' subcollection.
+ * Created when a user buys a ShopItem.
+ */
+data class PurchaseLogItem(
+    val id: String = "",
+    val itemName: String = "",
+    val itemCost: Int = 0,
+    val purchasedByUserId: String = "",
+    val purchasedByUserName: String = ""
+)

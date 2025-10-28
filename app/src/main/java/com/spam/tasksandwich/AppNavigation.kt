@@ -9,7 +9,6 @@ import androidx.compose.ui.Modifier
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
-import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 //import com.spam.tasksandwich.CreateRoomScreen
 
@@ -187,7 +186,7 @@ sealed class Screen(val route: String) {
                 route = Screen.CreateShopItem.route,
                 arguments = listOf(navArgument("roomId") { type = NavType.StringType })
             ) {
-                CreateShopItemScreen(
+                ManageShopScreen(
                     onNavigateBack = { navController.popBackStack() }
                 )
             }

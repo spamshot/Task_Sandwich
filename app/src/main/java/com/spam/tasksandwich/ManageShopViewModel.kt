@@ -5,6 +5,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.Firebase
 import com.google.firebase.Timestamp
+import com.google.firebase.auth.auth
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.firestore
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -12,36 +14,36 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
-import android.util.Log
+import com.spam.tasksandwich.ShopItem
+import com.spam.tasksandwich.PurchaseLogItem
 
-data class CreateShopItemUiState(
+data class ManageShopUiState(
     val isLoading: Boolean = true,
     val isSaving: Boolean = false,
     val existingItems: List<ShopItem> = emptyList(),
+    val pendingPurchases: List<PurchaseLogItem> = emptyList(),
     val saveSuccess: Boolean = false,
     val error: String? = null
 )
 
-class CreateShopItemViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
+class ManageShopViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
     private val db = Firebase.firestore
+    private val auth = Firebase.auth
     private val roomId: String = savedStateHandle.get("roomId")!!
 
-    private val _uiState = MutableStateFlow(CreateShopItemUiState())
+    private val _uiState = MutableStateFlow(ManageShopUiState())
     val uiState = _uiState.asStateFlow()
 
     init {
         listenForShopItems()
+        listenForPendingPurchases()
     }
 
-    private fun listenForShopItems() {
-        if (roomId.isBlank()) {
-            _uiState.update { it.copy(isLoading = false, error = "Room ID is missing.") }
-            return
-        }
 
+    private fun listenForShopItems() {
         db.collection("groups").document(roomId).collection("shopItems")
             .orderBy("createdAt", Query.Direction.DESCENDING)
-            .addSnapshotListener { snapshot, error ->
+            .addSnapshotListener { snapshot, _ ->
                 if (snapshot != null) {
                     val items = snapshot.documents.mapNotNull { doc ->
                         doc.toObject(ShopItem::class.java)?.copy(id = doc.id)
@@ -49,6 +51,58 @@ class CreateShopItemViewModel(savedStateHandle: SavedStateHandle) : ViewModel() 
                     _uiState.update { it.copy(isLoading = false, existingItems = items) }
                 }
             }
+    }
+
+    private fun listenForPendingPurchases() {
+        db.collection("groups").document(roomId).collection("purchaseLog")
+            .whereEqualTo("status", "pending")
+            .orderBy("purchasedAt", Query.Direction.ASCENDING)
+            .addSnapshotListener { snapshot, _ ->
+                if (snapshot != null) {
+                    val purchases = snapshot.documents.mapNotNull { doc ->
+                        doc.toObject(PurchaseLogItem::class.java)?.copy(id = doc.id)
+                    }
+                    _uiState.update { it.copy(pendingPurchases = purchases) }
+                }
+            }
+    }
+
+
+    // --- NEW FUNCTION: APPROVE ---
+    fun approvePurchase(purchase: PurchaseLogItem) {
+        val adminId = auth.currentUser?.uid ?: return
+        val purchaseRef = db.collection("groups").document(roomId)
+            .collection("purchaseLog").document(purchase.id)
+
+        purchaseRef.update(
+            "status", "completed",
+            "handledByUserId", adminId,
+            "handledAt", Timestamp.now()
+        )
+    }
+
+    // --- NEW FUNCTION: REFUND ---
+    fun refundPurchase(purchase: PurchaseLogItem) {
+        val adminId = auth.currentUser?.uid ?: return
+        viewModelScope.launch {
+            try {
+                val batch = db.batch()
+                val purchaseRef = db.collection("groups").document(roomId)
+                    .collection("purchaseLog").document(purchase.id)
+                batch.update(
+                    purchaseRef,
+                    "status", "refunded",
+                    "handledByUserId", adminId,
+                    "handledAt", Timestamp.now()
+                )
+                val memberRef = db.collection("groups").document(roomId)
+                    .collection("groupMembers").document(purchase.purchasedByUserId)
+                batch.update(memberRef, "totalPointsInGroup", FieldValue.increment(purchase.itemCost.toLong()))
+                batch.commit().await()
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = "Refund failed: ${e.message}") }
+            }
+        }
     }
 
     fun deleteShopItem(itemId: String) {
