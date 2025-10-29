@@ -15,5 +15,6 @@ data class PurchaseLogItem(
     val itemName: String = "",
     val itemCost: Int = 0,
     val purchasedByUserId: String = "",
-    val purchasedByUserName: String = ""
+    val purchasedByUserName: String = "",
+    val status: String = "pending"
 )

@@ -4,15 +4,10 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
@@ -20,7 +15,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import kotlinx.coroutines.launch
+import androidx.compose.foundation.layout.height
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.ui.graphics.Color
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -29,160 +29,208 @@ fun ManageShopScreen(
     viewModel: ManageShopViewModel = viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    var rewardName by rememberSaveable { mutableStateOf("") }
-    var pointsCost by rememberSaveable { mutableStateOf("") }
-    val snackbarHostState = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
 
-    // State for the Edit/Delete dialogs
+    // State to manage which tab is currently selected
+    var selectedTabIndex by remember { mutableStateOf(0) }
+    val tabs = listOf("Pending", "History", "Shop Items")
+
+    var showClearHistoryDialog by remember { mutableStateOf(false) }
+
+    // State for the dialogs
+    var showAddItemDialog by remember { mutableStateOf(false) }
     var itemToAction by remember { mutableStateOf<ShopItem?>(null) }
     var itemToEdit by remember { mutableStateOf<ShopItem?>(null) }
 
-    // This effect handles clearing the input fields after a new item is successfully saved.
-    LaunchedEffect(uiState.saveSuccess) {
-        if (uiState.saveSuccess) {
-            rewardName = ""
-            pointsCost = ""
-            scope.launch { snackbarHostState.showSnackbar("Item saved successfully!") }
-            viewModel.onSaveHandled()
-        }
+    // The "Add New Item" dialog is now triggered by the FAB
+    if (showAddItemDialog) {
+        // We can reuse our EditShopItemDialog, slightly repurposed
+        EditShopItemDialog(
+            item = ShopItem(name = "", cost = 0), // Pass an empty item
+            onDismiss = { showAddItemDialog = false },
+            onConfirm = { newName, newCost ->
+                viewModel.saveShopItem(newName, newCost)
+                showAddItemDialog = false
+            },
+            isCreating = true // Add a flag to change the title
+        )
     }
 
-    // Dialog 1: "Edit or Delete?"
+    // The other dialogs for Edit/Delete are unchanged
     if (itemToAction != null) {
         AlertDialog(
-            onDismissRequest = { itemToAction = null },
+            onDismissRequest = { itemToAction = null }, // Close if the user clicks outside
             title = { Text("Item Options") },
             text = { Text("What would you like to do with '${itemToAction!!.name}'?") },
             confirmButton = {
-                TextButton(onClick = {
-                    itemToEdit = itemToAction
-                    itemToAction = null
-                }) { Text("Edit") }
+                TextButton(
+                    onClick = {
+                        itemToEdit = itemToAction // Set the state to open the second dialog
+                        itemToAction = null       // Close this dialog
+                    }
+                ) { Text("Edit") }
             },
             dismissButton = {
                 Row {
-                    TextButton(onClick = {
-                        viewModel.deleteShopItem(itemToAction!!.id)
-                        itemToAction = null
-                    }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+                    TextButton(
+                        onClick = {
+                            viewModel.deleteShopItem(itemToAction!!.id)
+                            itemToAction = null // Close the dialog
+                        }
+                    ) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+
                     TextButton(onClick = { itemToAction = null }) { Text("Cancel") }
                 }
             }
         )
     }
-
-    // Dialog 2: "Edit Item Details"
     if (itemToEdit != null) {
         EditShopItemDialog(
             item = itemToEdit!!,
             onDismiss = { itemToEdit = null },
             onConfirm = { updatedName, updatedCost ->
                 viewModel.updateShopItem(itemToEdit!!.id, updatedName, updatedCost)
-                itemToEdit = null
+                itemToEdit = null // Close the dialog
+            }
+        )
+    }
+
+    if (showClearHistoryDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearHistoryDialog = false },
+            title = { Text("Clear Purchase History?") },
+            text = { Text("This will permanently delete all completed and refunded items from the log. This action cannot be undone.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.clearHistory()
+                        showClearHistoryDialog = false
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Clear History")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearHistoryDialog = false }) {
+                    Text("Cancel")
+                }
             }
         )
     }
 
     Scaffold(
-        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text("Manage Shop") },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Go Back")
+                navigationIcon = { IconButton(onClick = onNavigateBack) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Go Back")
+                } },
+                actions = {
+                    // Only show the "Clear History" button when the History tab is selected
+                    if (selectedTabIndex == 1) {
+                        IconButton(onClick = { showClearHistoryDialog = true }) {
+                            Icon(Icons.Default.Clear, contentDescription = "Clear History")
+                        }
                     }
                 }
             )
+                 },
+
+        // The FAB is only shown when the "Shop Items" tab is selected
+        floatingActionButton = {
+            if (selectedTabIndex == 2) {
+                FloatingActionButton(onClick = { showAddItemDialog = true }) {
+                    Icon(Icons.Default.Add, contentDescription = "Add Shop Item")
+                }
+            }
         }
     ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .padding(16.dp)
-                .verticalScroll(rememberScrollState())
-        ) {
-            // --- Section 1: Pending Purchases ---
-            Text("Pending Rewards", style = MaterialTheme.typography.titleLarge)
-            Spacer(Modifier.height(8.dp))
-            if (uiState.isLoading) {
-                CircularProgressIndicator()
-            } else if (uiState.pendingPurchases.isEmpty()) {
-                Text(
-                    "No pending rewards to approve.",
-                    modifier = Modifier.padding(vertical = 8.dp),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            } else {
-                // This Column is not scrollable itself, relying on the parent Column's scroll
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    uiState.pendingPurchases.forEach { purchase ->
-                        PendingPurchaseCard(
-                            purchase = purchase,
-                            onApprove = { viewModel.approvePurchase(purchase) },
-                            onRefund = { viewModel.refundPurchase(purchase) }
-                        )
-                    }
+        Column(modifier = Modifier.padding(paddingValues)) {
+            // The TabRow for navigating between sections
+            TabRow(selectedTabIndex = selectedTabIndex) {
+                tabs.forEachIndexed { index, title ->
+                    Tab(
+                        selected = selectedTabIndex == index,
+                        onClick = { selectedTabIndex = index },
+                        text = { Text(title) }
+                    )
                 }
             }
 
-            Divider(modifier = Modifier.padding(vertical = 24.dp))
-
-            // --- Section 2: Manage Available Items ---
-            Text("Manage Shop Items", style = MaterialTheme.typography.titleLarge)
-            Spacer(Modifier.height(8.dp))
-            // This Column is also not a LazyColumn to fit within the parent scrollable Column
-            Column {
-                uiState.existingItems.forEach { item ->
-                    ShopItemLogItem(item = item, onLongPress = { itemToAction = item })
-                    Divider()
-                }
-            }
-
-            Spacer(Modifier.height(24.dp))
-
-            // --- Section 3: Add New Item Form ---
-            Text("Add New Item", style = MaterialTheme.typography.titleLarge)
-            Spacer(Modifier.height(8.dp))
-            OutlinedTextField(
-                value = rewardName,
-                onValueChange = { rewardName = it },
-                label = { Text("Reward Name") },
-                modifier = Modifier.fillMaxWidth()
-            )
-            Spacer(Modifier.height(8.dp))
-            OutlinedTextField(
-                value = pointsCost,
-                onValueChange = { pointsCost = it },
-                label = { Text("Points Cost") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.fillMaxWidth()
-            )
-            Spacer(Modifier.height(16.dp))
-            Button(
-                onClick = { viewModel.saveShopItem(rewardName, pointsCost) },
-                enabled = !uiState.isSaving,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                if (uiState.isSaving) CircularProgressIndicator(Modifier.size(24.dp)) else Text("Save Item")
+            // The content of the selected tab
+            when (selectedTabIndex) {
+                0 -> PendingPurchasesList(uiState.pendingPurchases, viewModel)
+                1 -> PurchaseHistoryList(uiState.purchaseHistory)
+                2 -> ShopItemsList(uiState.existingItems) { itemToAction = it }
             }
         }
     }
 }
 
-/**
- * A Card to display a single pending purchase with Approve/Refund actions.
- */
+// --- NEW DEDICATED COMPOSABLES FOR EACH TAB ---
+
+@Composable
+fun PendingPurchasesList(purchases: List<PurchaseLogItem>, viewModel: ManageShopViewModel) {
+    if (purchases.isEmpty()) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("No pending rewards to approve.")
+        }
+    } else {
+        LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            // Add a key to each item, using its unique ID from Firestore.
+            items(items = purchases, key = { it.id }) { purchase ->
+                PendingPurchaseCard(
+                    purchase = purchase,
+                    onApprove = { viewModel.approvePurchase(purchase) },
+                    onRefund = { viewModel.refundPurchase(purchase) }
+                )
+            }
+        }
+    }
+}
+
+
+@Composable
+fun PurchaseHistoryList(history: List<PurchaseLogItem>) {
+    if (history.isEmpty()) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("No past purchases.")
+        }
+    } else {
+        LazyColumn(contentPadding = PaddingValues(16.dp)) {
+            // Add a key to each item, using its unique ID from Firestore.
+            items(items = history, key = { it.id }) { purchase ->
+                PurchaseHistoryItem(purchase = purchase)
+                HorizontalDivider(Modifier, DividerDefaults.Thickness, DividerDefaults.color)
+            }
+        }
+    }
+}
+
+@Composable
+fun ShopItemsList(items: List<ShopItem>, onLongPress: (ShopItem) -> Unit) {
+    if (items.isEmpty()) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("No shop items created yet. Press the '+' button to add one.")
+        }
+    } else {
+        LazyColumn(contentPadding = PaddingValues(16.dp)) {
+            items(items) { item ->
+                ShopItemLogItem(item = item, onLongPress = { onLongPress(item) })
+                Divider()
+            }
+        }
+    }
+}
+
 @Composable
 fun PendingPurchaseCard(
     purchase: PurchaseLogItem,
     onApprove: () -> Unit,
-    onRefund: () -> Unit
+    onRefund: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(modifier = modifier) {
         Column(Modifier.padding(12.dp)) {
             Text(
                 text = "'${purchase.itemName}' for ${purchase.purchasedByUserName}",
@@ -203,18 +251,43 @@ fun PendingPurchaseCard(
     }
 }
 
-/**
- * A Row for an item in the management log, with long-press detection.
- */
+@Composable
+fun PurchaseHistoryItem(purchase: PurchaseLogItem) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                "'${purchase.itemName}' for ${purchase.purchasedByUserName}",
+                style = MaterialTheme.typography.bodyLarge
+            )
+            Text(
+                "${purchase.itemCost} pts",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Text(
+            purchase.status.replaceFirstChar { it.uppercase() },
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Bold,
+            color = when (purchase.status) {
+                "completed" -> MaterialTheme.colorScheme.primary
+                "refunded" -> MaterialTheme.colorScheme.error
+                else -> Color.Unspecified
+            }
+        )
+    }
+}
+
 @Composable
 fun ShopItemLogItem(item: ShopItem, onLongPress: () -> Unit) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .pointerInput(Unit) {
-                detectTapGestures(onLongPress = { onLongPress() })
-            }
-            .padding(vertical = 12.dp),
+        modifier = Modifier.fillMaxWidth().pointerInput(Unit) {
+            detectTapGestures(onLongPress = { onLongPress() })
+        }.padding(vertical = 12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -223,21 +296,18 @@ fun ShopItemLogItem(item: ShopItem, onLongPress: () -> Unit) {
     }
 }
 
-/**
- * The dialog for editing a shop item's name and cost.
- */
 @Composable
 fun EditShopItemDialog(
     item: ShopItem,
     onDismiss: () -> Unit,
-    onConfirm: (String, String) -> Unit
+    onConfirm: (String, String) -> Unit,
+    isCreating: Boolean = false
 ) {
     var editName by remember { mutableStateOf(item.name) }
     var editCost by remember { mutableStateOf(item.cost.toString()) }
-
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Edit Item") },
+        title = { Text(if (isCreating) "Add New Item" else "Edit Item") },
         text = {
             Column {
                 OutlinedTextField(
@@ -254,15 +324,7 @@ fun EditShopItemDialog(
                 )
             }
         },
-        confirmButton = {
-            TextButton(onClick = { onConfirm(editName, editCost) }) {
-                Text("Save")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
-        }
+        confirmButton = { TextButton(onClick = { onConfirm(editName, editCost) }) { Text("Save") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
 }
