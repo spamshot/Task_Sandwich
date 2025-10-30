@@ -7,4 +7,14 @@
     <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+
+
+<!-- Leaderboard Colors   -->
+
+    <color name="first_greenLight">#4D57E457</color>>
+    <color name="second_greenDark">#80059705</color>>
+    <color name="first_blueLight">#C03B5DD0</color>>
+    <color name="second_blueDark">#C0092DA8</color>>
+
+
 </resources>

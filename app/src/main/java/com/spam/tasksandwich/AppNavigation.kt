@@ -30,8 +30,8 @@ sealed class Screen(val route: String) {
     object CreateRoom : Screen("create_room_screen")
 
 
-    object AssignTask : Screen("assign_task_screen/{roomId}") {
-        fun createRoute(roomId: String) = "assign_task_screen/$roomId"
+    object ManageTasks : Screen("manage_tasks_screen/{roomId}") {
+        fun createRoute(roomId: String) = "manage_tasks_screen/$roomId"
     }
     object CreateShopItem : Screen("create_shop_item_screen/{roomId}") {
         fun createRoute(roomId: String) = "create_shop_item_screen/$roomId"
@@ -148,7 +148,7 @@ sealed class Screen(val route: String) {
                 RoomDetailScreen(
                     roomId = roomId,
                     onNavigateBack = { navController.popBackStack() },
-                    onEditRoomClick = { navController.navigate(Screen.AssignTask.createRoute(roomId)) },
+                    onEditRoomClick = { navController.navigate(Screen.ManageTasks.createRoute(roomId)) },
                     onCreateShopClick = { navController.navigate(Screen.CreateShopItem.createRoute(roomId)) },
                     // Wire up the new button to the correct navigation action
                     onViewShopClick = { navController.navigate(Screen.ViewShop.createRoute(roomId)) }
@@ -165,11 +165,11 @@ sealed class Screen(val route: String) {
             }
 
             composable(
-                route = Screen.AssignTask.route,
+                route = Screen.ManageTasks.route,
                 arguments = listOf(navArgument("roomId") { type = NavType.StringType })
             ) {
-                AssignTaskScreen(
-                    onTaskSaved = { navController.popBackStack() }
+                ManageTasksScreen(
+                    onNavigateBack = { navController.popBackStack() }
                 )
             }
             composable(

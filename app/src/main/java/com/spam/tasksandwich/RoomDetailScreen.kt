@@ -52,9 +52,13 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CardDefaults.cardColors
+import androidx.compose.material3.CheckboxDefaults.colors
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.res.colorResource
 
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -189,10 +193,12 @@ fun RoomDetailScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     // Use itemsIndexed to get both the index (for rank) and the member data
-                    itemsIndexed(uiState.members) { index, member ->
+                    itemsIndexed(uiState.members, key = { _, member -> member.userId }) { index, member ->
                         MemberListItem(
-                            rank = index + 1, // Rank is the index plus one
+                            rank = index + 1,
                             member = member,
+                            // Pass a boolean flag if this is the first item in the list.
+                            isFirstPlace = (index == 0),
                             onLongPress = {
                                 memberToKick = member
                             }
@@ -203,10 +209,10 @@ fun RoomDetailScreen(
                 if (uiState.isAdmin) {
                     Spacer(modifier = Modifier.height(16.dp))
                     Button(onClick = onEditRoomClick, modifier = Modifier.fillMaxWidth()) {
-                        Text("Assign Tasks")
+                        Text("Manage Tasks")
                     }
                     OutlinedButton(onClick = onCreateShopClick, modifier = Modifier.fillMaxWidth()) {
-                        Text("Create Shop")
+                        Text("Manage Shop")
                     }
                     Spacer(modifier = Modifier.height(16.dp))
                 }
@@ -237,17 +243,29 @@ fun InfoBox(label: String, value: String, isPrimary: Boolean = false) {
 fun MemberListItem(
     rank: Int,
     member: RoomMember,
+    isFirstPlace: Boolean,
     onLongPress: () -> Unit) {
+//Change the color of the card based on the rank
+    val cardColors = if (isFirstPlace) {
+        CardDefaults.cardColors(
+            // Use a distinct, theme-aware color for emphasis.
+            containerColor = colorResource(id = R.color.first_greenLight), // Changes Card / box color
+//            contentColor = colorResource(id = R.color.second_blueDark) // Changes name and rank color
+        )
+    } else {
+        // Use the default card colors for everyone else.
+        CardDefaults.cardColors()
+    }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
             // --- NEW: Gesture Detection ---
             .pointerInput(Unit) {
                 detectTapGestures(
-                    onLongPress = { onLongPress() }
-                    // You can also add other gestures here like onPress, onDoubleTap, etc.
-                )
-            }
+                    onLongPress = { onLongPress() })
+            },
+        colors = cardColors
 
     ) {
         Row(

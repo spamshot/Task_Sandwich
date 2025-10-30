@@ -18,24 +18,26 @@ import kotlinx.coroutines.tasks.await
 import java.util.UUID
 import java.util.Calendar
 
-data class AssignTaskUiState(
+data class ManageTasksUiState(
     val isLoading: Boolean = true,
     val isSaving: Boolean = false,
     val members: List<RoomMember> = emptyList(),
+    val assignedTasks: List<Task> = emptyList(),
     val saveSuccess: Boolean = false,
     val error: String? = null
 )
 
-class AssignTaskViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
+class ManageTasksViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
     private val db = Firebase.firestore
     private val auth = Firebase.auth
-    private val roomId: String = savedStateHandle.get("roomId")!!
+    private val roomId: String = savedStateHandle["roomId"]!!
 
-    private val _uiState = MutableStateFlow(AssignTaskUiState())
+    private val _uiState = MutableStateFlow(ManageTasksUiState())
     val uiState = _uiState.asStateFlow()
 
     init {
         listenForMembers()
+        listenForAssignedTasks()
     }
 
     private fun listenForMembers() {
@@ -70,57 +72,101 @@ class AssignTaskViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
             }
     }
 
-    fun saveTask(
-        title: String,
-        pointsStr: String,
-        repeatOption: String,
-        assignedTo: RoomMember?,
-        expiresInDays: Int
-    ) {
+
+    private fun listenForAssignedTasks() {
+        db.collection("tasks")
+            .whereEqualTo("groupId", roomId)
+            .whereEqualTo("status", "assigned")
+            .orderBy("createdAt", Query.Direction.DESCENDING)
+            .addSnapshotListener { snapshot, _ ->
+                if (snapshot != null) {
+                    val tasks = snapshot.documents.mapNotNull { doc ->
+                        doc.toObject(Task::class.java)?.copy(id = doc.id)
+                    }
+                    // We can group them here to make the UI display easier
+                    _uiState.update { it.copy(isLoading = false, assignedTasks = tasks) }
+                }
+            }
+    }
+
+    fun deleteTask(taskId: String) {
+        viewModelScope.launch {
+            db.collection("tasks").document(taskId).delete().await()
+        }
+    }
+
+    fun saveTask(title: String, pointsStr: String, repeatOption: String, assignedTo: RoomMember?, expiresInDays: Int) {
         val currentUser = auth.currentUser
+        // Find the admin's name from the member list to use as the 'assignedByName'
         val adminName = uiState.value.members.find { it.userId == currentUser?.uid }?.name ?: "Admin"
 
-        // Basic validation
+        // --- Validation ---
         if (currentUser == null || assignedTo == null || title.isBlank()) {
             _uiState.update { it.copy(error = "Please fill out all fields.") }
             return
         }
         val points = pointsStr.toIntOrNull()
-        if(points == null || points < 0) {
+        if (points == null || points < 0) {
             _uiState.update { it.copy(error = "Please enter a valid number for points.") }
             return
         }
 
-
         _uiState.update { it.copy(isSaving = true, error = null) }
         viewModelScope.launch {
             try {
-                var dueDate: Timestamp? = null
-                if (expiresInDays > 0) {
-                    val calendar = Calendar.getInstance()
-                    calendar.add(Calendar.DAY_OF_YEAR, expiresInDays)
-                    dueDate = Timestamp(calendar.time)
-                }
-
-                // Determine if we're assigning to one person or many
+                // Determine if we are assigning to a single person or all members.
                 val membersToAssign = if (assignedTo.userId == "all") {
-                    // Filter out the "All Members" placeholder
+                    // Filter out the "All Members" placeholder from the list.
                     uiState.value.members.filter { it.userId != "all" }
                 } else {
-                    // Create a list with just the single selected member
+                    // Create a list containing just the single selected member.
                     listOf(assignedTo)
                 }
 
+                // If for some reason the list of members to assign to is empty, abort.
+                if (membersToAssign.isEmpty()) {
+                    _uiState.update { it.copy(isSaving = false, error = "No members to assign task to.") }
+                    return@launch
+                }
 
-                // --- BUG FIX ---
-                // Create a single, unique ID for this batch of assignments.
-                // This allows us to de-duplicate when calculating "Earnable Pts".
                 val sharedTaskId = UUID.randomUUID().toString()
-                // ---------------
 
+                // Create a single, representative Task object for the immediate UI update.
+                val representativeTaskForUi = Task(
+                    id = "temp_${UUID.randomUUID()}", // A temporary, unique ID for the UI key
+                    title = title,
+                    points = points,
+                    repeatOption = repeatOption,
+                    groupId = roomId,
+                    sharedTaskId = sharedTaskId,
+                    assignedByName = adminName,
+                    // Calculate the due date here to show it in the UI immediately
+                    dueDate = if (expiresInDays > 0) {
+                        val calendar = java.util.Calendar.getInstance()
+                        calendar.add(java.util.Calendar.DAY_OF_YEAR, expiresInDays)
+                        Timestamp(calendar.time)
+                    } else {
+                        null
+                    }
+                )
+
+                // --- OPTIMISTIC UI UPDATE ---
+                // This is the key fix: We immediately update the local state.
+                _uiState.update { currentState ->
+                    currentState.copy(
+                        // Prepend the new task to the front of the assigned tasks list.
+                        assignedTasks = listOf(representativeTaskForUi) + currentState.assignedTasks,
+                        saveSuccess = true, // Signal to the UI to clear the form fields.
+                        isSaving = false
+                    )
+                }
+                // ---------------------------
+
+                // --- Backend Operation ---
+                // Now, perform the actual database writes in the background.
                 val batch = db.batch()
                 membersToAssign.forEach { member ->
-                    val newTaskRef = db.collection("tasks").document() // Create a new unique task doc
+                    val newTaskRef = db.collection("tasks").document()
                     val taskData = hashMapOf(
                         "title" to title,
                         "points" to points,
@@ -131,22 +177,21 @@ class AssignTaskViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
                         "assignedByName" to adminName,
                         "status" to "assigned",
                         "isPersonal" to false,
-                        "sharedTaskId" to sharedTaskId, // Add the shared ID to each task
+                        "sharedTaskId" to sharedTaskId,
                         "createdAt" to Timestamp.now(),
-                        "dueDate" to dueDate
+                        "dueDate" to representativeTaskForUi.dueDate // Reuse the calculated dueDate
                     )
                     batch.set(newTaskRef, taskData)
                 }
-
                 batch.commit().await()
-                _uiState.update { it.copy(isSaving = false, saveSuccess = true) }
+                // The real-time listener will eventually get the "real" data from the server,
+                // which will seamlessly replace our temporary optimistic update.
 
             } catch (e: Exception) {
                 _uiState.update { it.copy(isSaving = false, error = e.message) }
             }
         }
     }
-
     fun onSaveHandled() {
         _uiState.update { it.copy(saveSuccess = false) }
     }

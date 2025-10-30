@@ -31,7 +31,8 @@ data class Task(
     val assignedByName: String = "Someone",
     val repeatOption: String = "Never",
     val groupId: String? = null,
-    val dueDate: Timestamp? = null
+    val dueDate: Timestamp? = null,
+    val sharedTaskId: String? = null
 )
 
 /**

@@ -143,7 +143,7 @@ fun AppShell(
         Screen.JoinRoom.route -> "Join a Room"
         Screen.ProfileSettings.route -> "Profile Settings"
         Screen.TaskSettings.route -> "Task Settings"
-        Screen.AssignTask.route -> "Assign Task"
+        Screen.ManageTasks.route -> "Manage Tasks"
         Screen.CreateShopItem.route -> "Manage Shop Items"
         Screen.ViewShop.route -> "Room Shop"
         Screen.EditTask.route -> "Edit Task"
