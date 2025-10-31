@@ -173,7 +173,7 @@ class ManageShopViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
         }
 
         // --- NEW FUNCTION: UPDATE ---
-        fun updateShopItem(itemId: String, newName: String, newCostStr: String) {
+        fun updateShopItem(itemId: String, newName: String, newCostStr: String, newMysteryText: String, newAutoRedeem: Boolean) {
             val newCost = newCostStr.toIntOrNull()
             if (itemId.isBlank() || newName.isBlank() || newCost == null || newCost <= 0) {
                 _uiState.update { it.copy(error = "Please enter a valid name and cost.") }
@@ -190,7 +190,9 @@ class ManageShopViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
                 try {
                     val updatedData = mapOf(
                         "name" to newName,
-                        "cost" to newCost
+                        "cost" to newCost,
+                        "mysteryText" to newMysteryText,
+                        "autoRedeem" to newAutoRedeem
                     )
                     db.collection("groups").document(roomId)
                         .collection("shopItems").document(itemId)
@@ -203,7 +205,7 @@ class ManageShopViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
             }
         }
 
-        fun saveShopItem(name: String, costStr: String) {
+        fun saveShopItem(name: String, costStr: String, mysteryText: String, autoRedeem: Boolean) {
             val cost = costStr.toIntOrNull()
             if (name.isBlank() || cost == null || cost <= 0) {
                 _uiState.update { it.copy(error = "Please enter a valid name and positive cost.") }
@@ -216,6 +218,8 @@ class ManageShopViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
                     val newItemData = hashMapOf(
                         "name" to name,
                         "cost" to cost,
+                        "mysteryText" to mysteryText,
+                        "autoRedeem" to autoRedeem,
                         "createdAt" to Timestamp.now()
                     )
 

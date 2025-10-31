@@ -140,10 +140,16 @@ class ViewShopViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
                 cart.forEach { item ->
                     val purchaseRef = db.collection("groups").document(roomId)
                         .collection("purchaseLog").document()
+
                     val purchaseData = hashMapOf(
-                        "itemId" to item.id, "itemName" to item.name, "itemCost" to item.cost,
-                        "purchasedByUserId" to currentUserId, "purchasedByUserName" to userName,
-                        "purchasedAt" to Timestamp.now(), "status" to "pending"
+                        "itemId" to item.id,
+                        "itemName" to item.name,
+                        "itemCost" to item.cost,
+                        "mysteryText" to item.mysteryText,
+                        "purchasedByUserId" to currentUserId,
+                        "purchasedByUserName" to userName,
+                        "purchasedAt" to Timestamp.now(),
+                        "status" to if (item.autoRedeem) "completed" else "pending"
                     )
                     batch.set(purchaseRef, purchaseData)
                 }

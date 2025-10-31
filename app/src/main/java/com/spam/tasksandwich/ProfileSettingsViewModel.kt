@@ -23,6 +23,7 @@ data class UserPurchaseLogItem( // A new data class for this screen
     val itemCost: Int = 0,
     val roomName: String = "A Room", // We need to know which room it was from
     val status: String = "",
+    val mysteryText: String = "",
     val purchasedAt: Timestamp? = null
 )
 
@@ -97,7 +98,8 @@ class ProfileSettingsViewModel : ViewModel() {
                                     itemCost = doc.getLong("itemCost")?.toInt() ?: 0,
                                     roomName = roomName,
                                     status = doc.getString("status") ?: "",
-                                    purchasedAt = doc.getTimestamp("purchasedAt")
+                                    purchasedAt = doc.getTimestamp("purchasedAt"),
+                                    mysteryText = doc.getString("mysteryText") ?: ""
                                 )
                             }
                         }

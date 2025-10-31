@@ -3,7 +3,9 @@ package com.spam.tasksandwich
 data class ShopItem(
     val id: String = "",
     val name: String = "",
-    val cost: Int = 0
+    val cost: Int = 0,
+    val mysteryText: String = "",
+    val autoRedeem: Boolean = false
 )
 
 /**
@@ -16,5 +18,6 @@ data class PurchaseLogItem(
     val itemCost: Int = 0,
     val purchasedByUserId: String = "",
     val purchasedByUserName: String = "",
-    val status: String = "pending"
+    val status: String = "pending",
+    val mysteryText: String = ""
 )

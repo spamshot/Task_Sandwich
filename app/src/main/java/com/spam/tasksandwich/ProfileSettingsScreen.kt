@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -177,6 +178,25 @@ fun TransactionLogList(history: List<UserPurchaseLogItem>) {
  */
 @Composable
 fun TransactionHistoryItem(purchase: UserPurchaseLogItem) {
+
+    val pointsText: String
+    val pointsColor: Color
+
+    when (purchase.status) {
+        "completed" -> {
+            pointsText = "-${purchase.itemCost} pts"
+            pointsColor = colorResource(id = R.color.approved_red_dark)
+        }
+        "refunded" -> {
+            pointsText = "+${purchase.itemCost} pts" // Show a plus for refunds
+            pointsColor = colorResource(id = R.color.refund_green_dark) // Use a positive color (like green/blue)
+        }
+        else -> { // "pending"
+            pointsText = "-+${purchase.itemCost} pts"
+            pointsColor =  colorResource(id = R.color.pending_blue_dark)
+        }
+    }
+
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -188,6 +208,14 @@ fun TransactionHistoryItem(purchase: UserPurchaseLogItem) {
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Bold
             )
+            if (purchase.mysteryText.isNotBlank() && purchase.status == "completed") {
+                Text(
+                    text = purchase.mysteryText,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
             purchase.purchasedAt?.let {
                 Text(
                     formatTimestamp(it), // Helper function to format the date
@@ -195,12 +223,20 @@ fun TransactionHistoryItem(purchase: UserPurchaseLogItem) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+            if (purchase.status == "pending") {
+                Text(
+                    "Status: Pending Approval",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
         Text(
-            "-${purchase.itemCost} pts",
+            text = pointsText,
             style = MaterialTheme.typography.bodyLarge,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.error
+            color = pointsColor
         )
     }
 }

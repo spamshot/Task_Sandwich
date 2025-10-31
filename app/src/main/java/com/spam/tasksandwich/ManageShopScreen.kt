@@ -43,15 +43,14 @@ fun ManageShopScreen(
 
     // The "Add New Item" dialog is now triggered by the FAB
     if (showAddItemDialog) {
-        // We can reuse our EditShopItemDialog, slightly repurposed
         EditShopItemDialog(
-            item = ShopItem(name = "", cost = 0), // Pass an empty item
+            item = ShopItem(name = "", cost = 0, mysteryText = ""), // Use your field name
             onDismiss = { showAddItemDialog = false },
-            onConfirm = { newName, newCost ->
-                viewModel.saveShopItem(newName, newCost)
+            onConfirm = { newName, newCost, newMysteryText, newAutoRedeem ->
+                viewModel.saveShopItem(newName, newCost, newMysteryText, newAutoRedeem)
                 showAddItemDialog = false
             },
-            isCreating = true // Add a flag to change the title
+            isCreating = true
         )
     }
 
@@ -87,9 +86,10 @@ fun ManageShopScreen(
         EditShopItemDialog(
             item = itemToEdit!!,
             onDismiss = { itemToEdit = null },
-            onConfirm = { updatedName, updatedCost ->
-                viewModel.updateShopItem(itemToEdit!!.id, updatedName, updatedCost)
-                itemToEdit = null // Close the dialog
+            // --- RENAMED: 'updatedMysteryText' ---
+            onConfirm = { updatedName, updatedCost, updatedMysteryText, updatedAutoRedeem ->
+                viewModel.updateShopItem(itemToEdit!!.id, updatedName, updatedCost, updatedMysteryText, updatedAutoRedeem)
+                itemToEdit = null
             }
         )
     }
@@ -301,11 +301,15 @@ fun ShopItemLogItem(item: ShopItem, onLongPress: () -> Unit) {
 fun EditShopItemDialog(
     item: ShopItem,
     onDismiss: () -> Unit,
-    onConfirm: (String, String) -> Unit,
+    onConfirm: (String, String, String, Boolean) -> Unit,
     isCreating: Boolean = false
 ) {
     var editName by remember { mutableStateOf(item.name) }
     var editCost by remember { mutableStateOf(item.cost.toString()) }
+    var editMysteryText by remember { mutableStateOf(item.mysteryText) }
+    var editAutoRedeem by remember { mutableStateOf(item.autoRedeem) }
+
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (isCreating) "Add New Item" else "Edit Item") },
@@ -317,15 +321,34 @@ fun EditShopItemDialog(
                     label = { Text("Reward Name") }
                 )
                 Spacer(Modifier.height(8.dp))
+
                 OutlinedTextField(
                     value = editCost,
                     onValueChange = { editCost = it },
                     label = { Text("Points Cost") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                 )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = editMysteryText,
+                    onValueChange = { editMysteryText = it },
+                    label = { Text("Mystery Text (Optional)") },
+                    singleLine = false,
+                    maxLines = 3
+                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Auto Redeem", modifier = Modifier.weight(1f))
+                    Switch(
+                        checked = editAutoRedeem,
+                        onCheckedChange = { editAutoRedeem = it }
+                    )
+                }
             }
         },
-        confirmButton = { TextButton(onClick = { onConfirm(editName, editCost) }) { Text("Save") } },
+        confirmButton = { TextButton(onClick = { onConfirm(editName, editCost, editMysteryText, editAutoRedeem) }) { Text("Save") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
 }

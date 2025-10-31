@@ -11,10 +11,19 @@
 
 <!-- Leaderboard Colors   -->
 
-    <color name="first_greenLight">#4D57E457</color>>
-    <color name="second_greenDark">#80059705</color>>
-    <color name="first_blueLight">#C03B5DD0</color>>
-    <color name="second_blueDark">#C0092DA8</color>>
+    <color name="first_greenLight">#4D57E457</color>
+    <color name="second_greenDark">#80059705</color>
+    <color name="first_blueLight">#C03B5DD0</color>
+    <color name="second_blueDark">#C0092DA8</color>
+
+
+<!--Transitions Log Colors-->
+
+    <color name="refund_green_dark">#7C2A992A</color>
+    <color name="approved_red_dark">#80D93434</color>
+    <color name="pending_blue_dark">#A9324DBD</color>
+
+
 
 
 </resources>
