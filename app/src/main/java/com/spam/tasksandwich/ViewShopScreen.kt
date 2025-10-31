@@ -2,6 +2,7 @@ package com.spam.tasksandwich
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -51,25 +52,25 @@ fun ViewShopScreen(
 
     Scaffold(
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
-        topBar = {
-            TopAppBar(
-                title = { Text("${uiState.roomName} Shop") },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Go Back")
-                    }
-                },
-                actions = {
-                    // Display the user's current point total for this room in the top bar.
-                    Text(
-                        text = "Your Points: ${uiState.userPointsInRoom}",
-                        modifier = Modifier.padding(end = 16.dp),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            )
-        }
+//        topBar = {
+//            TopAppBar(
+//                title = { Text("${uiState.roomName} Shop") },
+//                navigationIcon = {
+//                    IconButton(onClick = onNavigateBack) {
+//                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Go Back")
+//                    }
+//                },
+//                actions = {
+//                    // Display the user's current point total for this room in the top bar.
+//                    Text(
+//                        text = "Your Points: ${uiState.userPointsInRoom}",
+//                        modifier = Modifier.padding(end = 16.dp),
+//                        style = MaterialTheme.typography.titleMedium,
+//                        fontWeight = FontWeight.Bold
+//                    )
+//                }
+//            )
+//        }
     ) { paddingValues ->
         if (uiState.isLoading) {
             Box(Modifier.fillMaxSize().padding(paddingValues), contentAlignment = Alignment.Center) {
@@ -85,6 +86,19 @@ fun ViewShopScreen(
                     .padding(horizontal = 16.dp)
             ) {
                 // The Grid of shop items, which takes up the available vertical space.
+                Row(modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End) {
+                    Card(modifier = Modifier.padding(4.dp))  {
+                        Text(
+                            text = "Points: ${uiState.userPointsInRoom}",
+                            modifier = Modifier.padding(end = 16.dp),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+
+                    }
+                }
+
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(2),
                     modifier = Modifier.weight(1f),

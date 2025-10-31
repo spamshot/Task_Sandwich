@@ -125,25 +125,25 @@ fun RoomDetailScreen(
 
 
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(uiState.roomName) },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Go Back"
-                        )
-                    } },
-                    actions = {
-                        if (uiState.isAdmin) {
-                            IconButton(onClick = { showEditRoomDialog = true }) {
-                                Icon(Icons.Default.Edit, contentDescription = "Edit Room")
-                            }
-                        }
-                    }
-                    )
-                }
+//        topBar = {
+//            TopAppBar(
+//                title = { Text(uiState.roomName) },
+//                navigationIcon = {
+//                    IconButton(onClick = onNavigateBack) {
+//                        Icon(
+//                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+//                            contentDescription = "Go Back"
+//                        )
+//                    } },
+//                actions = {
+//                    if (uiState.isAdmin) {
+//                        IconButton(onClick = { showEditRoomDialog = true }) {
+//                            Icon(Icons.Default.Edit, contentDescription = "Edit Room")
+//                        }
+//                    }
+//                }
+//            )
+//        }
     ) { paddingValues ->
         // Handle the loading state first
         if (uiState.isLoading) {
@@ -346,4 +346,3 @@ fun EditRoomDialog(
         }
     )
 }
-

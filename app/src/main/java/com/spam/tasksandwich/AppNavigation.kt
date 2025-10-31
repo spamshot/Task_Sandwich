@@ -49,71 +49,71 @@ sealed class Screen(val route: String) {
     }
 }
 
-    /**
-     * The main navigation component for the app. It is now a modular component
-     * that is placed inside the AppShell.
-     *
-     * @param navController The NavHostController that manages navigation, passed from AppShell.
-     * @param paddingValues The padding provided by the Scaffold in AppShell, to avoid content
-     *                      overlapping with the TopAppBar.
-     */
-    @Composable
-    fun AppNavHost(
-        navController: NavHostController,
-        paddingValues: PaddingValues
+/**
+ * The main navigation component for the app. It is now a modular component
+ * that is placed inside the AppShell.
+ *
+ * @param navController The NavHostController that manages navigation, passed from AppShell.
+ * @param paddingValues The padding provided by the Scaffold in AppShell, to avoid content
+ *                      overlapping with the TopAppBar.
+ */
+@Composable
+fun AppNavHost(
+    navController: NavHostController,
+    paddingValues: PaddingValues
+) {
+    NavHost(
+        navController = navController,
+        startDestination = Screen.Splash.route,
+        modifier = Modifier.padding(paddingValues)
     ) {
-        NavHost(
-            navController = navController,
-            startDestination = Screen.Splash.route,
-            modifier = Modifier.padding(paddingValues)
-        ) {
-            composable(Screen.Splash.route) {
-                SplashScreen(navController = navController)
-            }
+        composable(Screen.Splash.route) {
+            SplashScreen(navController = navController)
+        }
 
-            composable(Screen.Auth.route) {
-                AuthScreen(onAuthSuccess = {
-                    navController.navigate(Screen.Splash.route) {
-                        popUpTo(Screen.Auth.route) { inclusive = true }
-                    }
-                })
-            }
+        composable(Screen.Auth.route) {
+            AuthScreen(onAuthSuccess = {
+                navController.navigate(Screen.Splash.route) {
+                    popUpTo(Screen.Auth.route) { inclusive = true }
+                }
+            })
+        }
 
-            composable(Screen.ProfileSetup.route) {
-                ProfileSetupScreen(onProfileSaved = {
-                    navController.navigate(Screen.Home.route) {
-                        popUpTo(Screen.ProfileSetup.route) { inclusive = true }
-                    }
-                })
-            }
+        composable(Screen.ProfileSetup.route) {
+            ProfileSetupScreen(onProfileSaved = {
+                navController.navigate(Screen.Home.route) {
+                    popUpTo(Screen.ProfileSetup.route) { inclusive = true }
+                }
+            })
+        }
 
-            composable(Screen.Home.route) {
-                HomeScreen(navController = navController)
-            }
+        composable(Screen.Home.route) {
+            HomeScreen(navController = navController)
+        }
 
-            composable(Screen.ProfileSettings.route) {
-                ProfileSettingsScreen(onLogoutSuccess = {
-                    navController.navigate(Screen.Auth.route) {
-                        popUpTo(navController.graph.id) { inclusive = true }
-                    }
-                })
-            }
+        composable(Screen.ProfileSettings.route) {
+            ProfileSettingsScreen(onLogoutSuccess = {
+                navController.navigate(Screen.Auth.route) {
+                    popUpTo(navController.graph.id) { inclusive = true }
+                }
+            })
+        }
 
-            composable(Screen.AddSelfTask.route) {
-                AddSelfTaskScreen(
-                    onGoBack = { navController.popBackStack() },
-                    onNavigateToSettings = { navController.navigate(Screen.TaskSettings.route) }
-                )
-            }
+        composable(Screen.AddSelfTask.route) {
+            AddSelfTaskScreen(
+                onGoBack = { navController.popBackStack() },
+                onNavigateToSettings = { navController.navigate(Screen.TaskSettings.route) }
+            )
+        }
 
-            composable(Screen.TaskSettings.route) {
-                TaskSettingsScreen(
-                    onNavigateBack = { navController.popBackStack() },
-                    onNavigateToEdit = { taskId ->
-                        navController.navigate(Screen.EditTask.createRoute(taskId))
-                    }
-                )
-            }
+        composable(Screen.TaskSettings.route) {
+            TaskSettingsScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToEdit = { taskId ->
+                    navController.navigate(Screen.EditTask.createRoute(taskId))
+                }
+            )
+        }
 
 //            composable(Screen.JoinRoom.route) {
 //                JoinRoomScreen(onJoinSuccess = { roomId ->
@@ -140,55 +140,55 @@ sealed class Screen(val route: String) {
 //            }
 
 
-            composable(
-                route = Screen.RoomDetail.route,
-                arguments = listOf(navArgument("roomId") { type = NavType.StringType })
-            ) { backStackEntry ->
-                val roomId = backStackEntry.arguments?.getString("roomId") ?: ""
-                RoomDetailScreen(
-                    roomId = roomId,
-                    onNavigateBack = { navController.popBackStack() },
-                    onEditRoomClick = { navController.navigate(Screen.ManageTasks.createRoute(roomId)) },
-                    onCreateShopClick = { navController.navigate(Screen.CreateShopItem.createRoute(roomId)) },
-                    // Wire up the new button to the correct navigation action
-                    onViewShopClick = { navController.navigate(Screen.ViewShop.createRoute(roomId)) }
-                )
-            }
+        composable(
+            route = Screen.RoomDetail.route,
+            arguments = listOf(navArgument("roomId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val roomId = backStackEntry.arguments?.getString("roomId") ?: ""
+            RoomDetailScreen(
+                roomId = roomId,
+                onNavigateBack = { navController.popBackStack() },
+                onEditRoomClick = { navController.navigate(Screen.ManageTasks.createRoute(roomId)) },
+                onCreateShopClick = { navController.navigate(Screen.CreateShopItem.createRoute(roomId)) },
+                // Wire up the new button to the correct navigation action
+                onViewShopClick = { navController.navigate(Screen.ViewShop.createRoute(roomId)) }
+            )
+        }
 
-            composable(
-                route = Screen.EditTask.route,
-                arguments = listOf(navArgument("taskId") { type = NavType.StringType })
-            ) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("Edit Task Screen (Placeholder)")
-                }
-            }
-
-            composable(
-                route = Screen.ManageTasks.route,
-                arguments = listOf(navArgument("roomId") { type = NavType.StringType })
-            ) {
-                ManageTasksScreen(
-                    onNavigateBack = { navController.popBackStack() }
-                )
-            }
-            composable(
-                route = Screen.ViewShop.route,
-                arguments = listOf(navArgument("roomId") { type = NavType.StringType })
-            ) {
-                // We will build this screen next
-                ViewShopScreen(
-                    onNavigateBack = { navController.popBackStack() }
-                )
-            }
-
-            composable(
-                route = Screen.CreateShopItem.route,
-                arguments = listOf(navArgument("roomId") { type = NavType.StringType })
-            ) {
-                ManageShopScreen(
-                    onNavigateBack = { navController.popBackStack() }
-                )
+        composable(
+            route = Screen.EditTask.route,
+            arguments = listOf(navArgument("taskId") { type = NavType.StringType })
+        ) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("Edit Task Screen (Placeholder)")
             }
         }
+
+        composable(
+            route = Screen.ManageTasks.route,
+            arguments = listOf(navArgument("roomId") { type = NavType.StringType })
+        ) {
+            ManageTasksScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+        composable(
+            route = Screen.ViewShop.route,
+            arguments = listOf(navArgument("roomId") { type = NavType.StringType })
+        ) {
+            // We will build this screen next
+            ViewShopScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(
+            route = Screen.CreateShopItem.route,
+            arguments = listOf(navArgument("roomId") { type = NavType.StringType })
+        ) {
+            ManageShopScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
     }
+}

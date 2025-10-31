@@ -119,22 +119,23 @@ fun ManageShopScreen(
     }
 
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Manage Shop") },
-                navigationIcon = { IconButton(onClick = onNavigateBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Go Back")
-                } },
-                actions = {
-                    // Only show the "Clear History" button when the History tab is selected
-                    if (selectedTabIndex == 1) {
-                        IconButton(onClick = { showClearHistoryDialog = true }) {
-                            Icon(Icons.Default.Clear, contentDescription = "Clear History")
-                        }
-                    }
-                }
-            )
-                 },
+//        topBar = {
+//            TopAppBar(
+//                title = { Text("Manage Shop") },
+//                navigationIcon = { IconButton(onClick = onNavigateBack) {
+//                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Go Back")
+//                } },
+//                actions = {
+//                    // Only show the "Clear History" button when the History tab is selected
+//                    if (selectedTabIndex == 1) {
+//                        IconButton(onClick = { showClearHistoryDialog = true }) {
+//                            Icon(Icons.Default.Clear, contentDescription = "Clear History")
+//                        }
+//                    }
+//                }
+//            )
+//                 }
+//        ,
 
         // The FAB is only shown when the "Shop Items" tab is selected
         floatingActionButton = {

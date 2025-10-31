@@ -4,6 +4,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -18,12 +19,16 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.google.firebase.Timestamp
 import kotlinx.coroutines.launch
 import kotlin.collections.mapOf
 import com.spam.tasksandwich.R
+import java.text.SimpleDateFormat
+import java.util.Locale
 
 
 @Composable
@@ -32,30 +37,57 @@ fun ProfileSettingsScreen(
     viewModel: ProfileSettingsViewModel = viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+
+    // State to manage which tab is currently selected
+    var selectedTabIndex by remember { mutableStateOf(0) }
+    val tabs = listOf("Settings", "Transaction Log")
+
+    // This effect handles the navigation callback on successful logout.
+    LaunchedEffect(uiState.logoutSuccess) {
+        if (uiState.logoutSuccess) {
+            onLogoutSuccess()
+        }
+    }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        TabRow(selectedTabIndex = selectedTabIndex) {
+            tabs.forEachIndexed { index, title ->
+                Tab(
+                    selected = selectedTabIndex == index,
+                    onClick = { selectedTabIndex = index },
+                    text = { Text(title) }
+                )
+            }
+        }
+
+        // Display the content for the currently selected tab
+        when (selectedTabIndex) {
+            0 -> ProfileSettingsForm(uiState = uiState, viewModel = viewModel)
+            1 -> TransactionLogList(history = uiState.purchaseHistory)
+        }
+    }
+}
+
+/**
+ * The content for the "Settings" tab, containing the user profile form.
+ */
+@Composable
+fun ProfileSettingsForm(uiState: ProfileSettingsUiState, viewModel: ProfileSettingsViewModel) {
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
-    // Local state for the text fields and icon, which will be populated from the ViewModel.
-    // Using `remember` here is fine because LaunchedEffect will update them when the profile loads.
     var name by remember { mutableStateOf("") }
     var age by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var selectedIconId by remember { mutableStateOf("") }
 
-    // This effect populates the form fields once the user's profile is loaded from Firestore.
+    // This effect populates the form fields once the user's profile is loaded.
     LaunchedEffect(uiState.userProfile) {
         uiState.userProfile?.let {
             name = it.name
             age = it.age?.toString() ?: ""
             email = it.email ?: ""
-            selectedIconId = it.selectedIconId ?: "avatar_1" // Provide a default
-        }
-    }
-
-    // This effect triggers the navigation callback when the ViewModel confirms a successful logout.
-    LaunchedEffect(uiState.logoutSuccess) {
-        if (uiState.logoutSuccess) {
-            onLogoutSuccess()
+            selectedIconId = it.selectedIconId ?: "avatar_1"
         }
     }
 
@@ -65,29 +97,22 @@ fun ProfileSettingsScreen(
             scope.launch {
                 snackbarHostState.showSnackbar("Profile saved successfully!")
             }
-            viewModel.onSaveHandled() // Reset the event state
+            viewModel.onSaveHandled()
         }
     }
 
-    Scaffold(
-        snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
-    ) { paddingValues ->
-        // Show a loading indicator while the profile is being fetched.
+    Scaffold(snackbarHost = { SnackbarHost(hostState = snackbarHostState) }) { paddingValues ->
         if (uiState.isLoading) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
-            }
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         } else {
-            // Main content column
             Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
                     .padding(16.dp)
-                    .verticalScroll(rememberScrollState()), // Make the column scrollable
+                    .verticalScroll(rememberScrollState()),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Icon Selector Section
                 Text("Choose your Icon", style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(8.dp))
                 IconSelector(
@@ -96,23 +121,19 @@ fun ProfileSettingsScreen(
                 )
                 Spacer(Modifier.height(24.dp))
 
-                // User Info Text Fields
                 OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name") }, modifier = Modifier.fillMaxWidth())
                 Spacer(Modifier.height(16.dp))
                 OutlinedTextField(value = age, onValueChange = { age = it }, label = { Text("Age") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth())
                 Spacer(Modifier.height(16.dp))
                 OutlinedTextField(value = email, onValueChange = { email = it }, label = { Text("Email") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email), modifier = Modifier.fillMaxWidth())
 
-                // Spacer to push the buttons to the bottom of the screen
-                Spacer(Modifier.weight(1f))
+                Spacer(Modifier.weight(1f)) // Pushes buttons to the bottom
 
-                // Display error messages from the ViewModel
                 if (uiState.error != null) {
                     Text(uiState.error!!, color = MaterialTheme.colorScheme.error)
                 }
                 Spacer(Modifier.height(8.dp))
 
-                // Action Buttons Section
                 Button(
                     onClick = { viewModel.saveProfile(name, age, email, selectedIconId) },
                     enabled = !uiState.isSaving,
@@ -130,23 +151,74 @@ fun ProfileSettingsScreen(
 }
 
 /**
+ * The content for the "Transaction Log" tab, displaying a list of past purchases.
+ */
+@Composable
+fun TransactionLogList(history: List<UserPurchaseLogItem>) {
+    if (history.isEmpty()) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text(
+                "No purchase history found.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    } else {
+        LazyColumn(contentPadding = PaddingValues(16.dp)) {
+            items(items = history, key = { it.id }) { purchase ->
+                TransactionHistoryItem(purchase = purchase)
+                Divider()
+            }
+        }
+    }
+}
+
+/**
+ * A Row that displays a single item in the user's transaction history.
+ */
+@Composable
+fun TransactionHistoryItem(purchase: UserPurchaseLogItem) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                "'${purchase.itemName}' from ${purchase.roomName}",
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Bold
+            )
+            purchase.purchasedAt?.let {
+                Text(
+                    formatTimestamp(it), // Helper function to format the date
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        Text(
+            "-${purchase.itemCost} pts",
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.error
+        )
+    }
+}
+
+/**
  * A composable that displays a scrollable row of selectable preset icons.
- * This version uses a compile-time safe map to access drawable resources.
  */
 @Composable
 fun IconSelector(selectedIconId: String, onIconSelected: (String) -> Unit) {
-    // A map that links string identifiers to their compile-time safe resource IDs (R.drawable...).
-    // This is the recommended approach to avoid runtime reflection.
     val presetIconMap = remember {
         mapOf(
             "avatar_1" to R.drawable.carrotdog,
-            "avatar_2" to R.drawable.firehairguy,
-            "avatar_3" to R.drawable.dallebabyface,
-            "avatar_4" to R.drawable.vgfbhbluehair,
-            "avatar_5" to R.drawable.fglasses
+            "avatar_2" to R.drawable.dallebabyface,
+            "avatar_3" to R.drawable.fglasses,
+            "avatar_4" to R.drawable.firehairguy,
+            "avatar_5" to R.drawable.vgfbhbluehair
         )
     }
-
     LazyRow(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         contentPadding = PaddingValues(horizontal = 16.dp)
@@ -156,7 +228,7 @@ fun IconSelector(selectedIconId: String, onIconSelected: (String) -> Unit) {
                 modifier = Modifier
                     .size(64.dp)
                     .clip(CircleShape)
-                    .clickable { onIconSelected(iconId) } // The callback uses the string identifier
+                    .clickable { onIconSelected(iconId) }
                     .border(
                         width = if (selectedIconId == iconId) 3.dp else 0.dp,
                         color = if (selectedIconId == iconId) MaterialTheme.colorScheme.primary else Color.Transparent,
@@ -164,11 +236,16 @@ fun IconSelector(selectedIconId: String, onIconSelected: (String) -> Unit) {
                     )
             ) {
                 Image(
-                    painter = painterResource(id = resId), // The image uses the safe R.drawable ID
+                    painter = painterResource(id = resId),
                     contentDescription = "$iconId icon",
                     modifier = Modifier.fillMaxSize()
                 )
             }
         }
     }
+}
+
+// Helper function to format a Timestamp into a readable date string.
+private fun formatTimestamp(timestamp: Timestamp): String {
+    return SimpleDateFormat("MMM dd, yyyy", Locale.getDefault()).format(timestamp.toDate())
 }
