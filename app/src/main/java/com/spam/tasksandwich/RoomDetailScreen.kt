@@ -2,7 +2,8 @@ package com.spam.tasksandwich
 
 
 
-import androidx.compose.foundation.clickable
+import android.R.id.tabs
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,50 +16,55 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.spam.tasksandwich.ui.theme.TaskSandwichTheme
-
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.pointer.pointerInput
-
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CardDefaults.cardColors
-import androidx.compose.material3.CheckboxDefaults.colors
+import androidx.compose.material3.Divider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.text.style.TextAlign
+import com.google.firebase.Timestamp
+import java.text.SimpleDateFormat
+import java.util.Locale
+import kotlin.math.roundToInt
 
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -66,14 +72,19 @@ import androidx.compose.ui.res.colorResource
 fun RoomDetailScreen(
     roomId: String,
     onNavigateBack: () -> Unit,
-    onEditRoomClick: () -> Unit,
+//    onEditRoomClick: () -> Unit,
     onCreateShopClick: () -> Unit,
     onViewShopClick: () -> Unit,
+    onNavigateToManageTasks: () -> Unit,
     viewModel: RoomDetailViewModel = viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var memberToKick by remember { mutableStateOf<RoomMember?>(null) }
     var showEditRoomDialog by remember { mutableStateOf(false) }
+
+
+    var selectedTabIndex by remember { mutableStateOf(0) }
+    val tabs = listOf("Leaderboard", "Top Task") // Placeholder for the second tab
 
     // --- NEW: Confirmation Dialog ---
     if (memberToKick != null) {
@@ -125,25 +136,7 @@ fun RoomDetailScreen(
 
 
     Scaffold(
-//        topBar = {
-//            TopAppBar(
-//                title = { Text(uiState.roomName) },
-//                navigationIcon = {
-//                    IconButton(onClick = onNavigateBack) {
-//                        Icon(
-//                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-//                            contentDescription = "Go Back"
-//                        )
-//                    } },
-//                actions = {
-//                    if (uiState.isAdmin) {
-//                        IconButton(onClick = { showEditRoomDialog = true }) {
-//                            Icon(Icons.Default.Edit, contentDescription = "Edit Room")
-//                        }
-//                    }
-//                }
-//            )
-//        }
+
     ) { paddingValues ->
         // Handle the loading state first
         if (uiState.isLoading) {
@@ -169,58 +162,302 @@ fun RoomDetailScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceAround,
                     verticalAlignment = Alignment.CenterVertically
+                    //Top "bar" with room details
                 ) {
                     InfoBox(label = "Members", value = uiState.memberCount.toString())
                     InfoBox(label = "Room Code", value = uiState.joinCode, isPrimary = true)
                     InfoBox(label = "Earnable Pts", value = uiState.totalEarnablePoints.toString())
                 }
-
-
-                Button(
-                    onClick = onViewShopClick,
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
-                ) {
-                    Text("View Room Shop")
-                }
-                Spacer(modifier = Modifier.height(24.dp))
-
-                // LEADERBOARD
-                Text("Leaderboard", style = MaterialTheme.typography.titleLarge)
-                Spacer(modifier = Modifier.height(8.dp))
-
-                LazyColumn(
-                    modifier = Modifier.weight(1f), // Allow the list to take up available space
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    // Use itemsIndexed to get both the index (for rank) and the member data
-                    itemsIndexed(uiState.members, key = { _, member -> member.userId }) { index, member ->
-                        MemberListItem(
-                            rank = index + 1,
-                            member = member,
-                            // Pass a boolean flag if this is the first item in the list.
-                            isFirstPlace = (index == 0),
-                            onLongPress = {
-                                memberToKick = member
-                            }
+                TabRow(selectedTabIndex = selectedTabIndex) {
+                    tabs.forEachIndexed { index, title ->
+                        Tab(
+                            selected = selectedTabIndex == index,
+                            onClick = { selectedTabIndex = index },
+                            text = { Text(title) }
                         )
                     }
                 }
-                // Admin Buttons
-                if (uiState.isAdmin) {
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Button(onClick = onEditRoomClick, modifier = Modifier.fillMaxWidth()) {
-                        Text("Manage Tasks")
-                    }
-                    OutlinedButton(onClick = onCreateShopClick, modifier = Modifier.fillMaxWidth()) {
-                        Text("Manage Shop")
-                    }
-                    Spacer(modifier = Modifier.height(16.dp))
+                // Display the content for the selected tab
+                when (selectedTabIndex) {
+                    0 -> LeaderboardTabContent(
+                        uiState = uiState,
+                        onViewShopClick = onViewShopClick,
+                        onNavigateToManageTasks = onNavigateToManageTasks,
+                        onCreateShopClick = onCreateShopClick,
+                        onMemberLongPress = { memberToKick = it }
+                    )
+
+                    1 -> TopTasksTab(topTasks = uiState.topTasks)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun LeaderboardTabContent(
+    uiState: RoomDetailUiState,
+    onViewShopClick: () -> Unit,
+    onNavigateToManageTasks: () -> Unit,
+    onCreateShopClick: () -> Unit,
+    onMemberLongPress: (RoomMember) -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        if (uiState.isLoading) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+        } else {
+            Button(
+                onClick = onViewShopClick,
+                modifier = Modifier.fillMaxWidth().padding(16.dp)
+            ) {
+                Text("View Room Shop")
+            }
+
+            Text("Leaderboard", style = MaterialTheme.typography.titleLarge)
+            Spacer(modifier = Modifier.height(8.dp))
+
+            LazyColumn(
+                modifier = Modifier.weight(1f).padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                itemsIndexed(items = uiState.members, key = { _, member -> member.userId }) { index, member ->
+                    MemberListItem(
+                        rank = index + 1,
+                        member = member,
+                        isFirstPlace = (index == 0),
+                        onLongPress = { onMemberLongPress(member) }
+                    )
                 }
             }
 
+            if (uiState.isAdmin) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Button(onClick = onNavigateToManageTasks, modifier = Modifier.weight(1f)) {
+                        Text("Manage Tasks")
+                    }
+                    Button(onClick = onCreateShopClick, modifier = Modifier.weight(1f)) {
+                        Text("Manage Shop")
+                    }
+                }
+            }
         }
     }
-}@Composable
+}
+
+@Composable
+fun TopTasksTab(topTasks: List<AggregatedTask>) {
+    val completedTasks = topTasks
+        .filter { it.pendingCount == 0 && it.completedAt != null }
+        .sortedByDescending { it.completedAt }
+        .take(7)
+
+    val pendingTasks = topTasks
+        .filter { it.pendingCount > 0 && it.createdAt != null }
+        .sortedByDescending { it.createdAt }
+        .take(7)
+
+    if (topTasks.isEmpty()) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("No tasks have been assigned in this room yet.")
+        }
+    } else {
+        // Use a LazyColumn as the root for the entire tab. This is the most efficient
+        // way to display multiple sections that might scroll off-screen.
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            // --- Section 1: In Progress Card ---
+            item {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column {
+                        Text(
+                            "In Progress",
+                            style = MaterialTheme.typography.titleMedium,
+                            modifier = Modifier.padding(12.dp)
+                        )
+                        Divider()
+                        if (pendingTasks.isEmpty()) {
+                            Box(Modifier.padding(12.dp).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                Text("None")
+                            }
+                        } else {
+                            Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                                pendingTasks.forEach { task ->
+                                    CompactTaskItem(task = task)
+                                    Divider()
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // --- Section 2: Completed Card ---
+            item {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column {
+                        Text(
+                            "100% Completed",
+                            style = MaterialTheme.typography.titleMedium,
+                            modifier = Modifier.padding(12.dp)
+                        )
+                        Divider()
+                        if (completedTasks.isEmpty()) {
+                            Box(Modifier.padding(12.dp).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                Text("None")
+                            }
+                        } else {
+                            Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                                completedTasks.forEach { task ->
+                                    CompactTaskItem(task = task)
+                                    Divider()
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun CompactTaskItem(task: AggregatedTask) {
+    // Calculate completion percentage
+    val totalAssignments = task.completedCount + task.pendingCount
+    val completionPercentage = if (totalAssignments > 0) {
+        (task.completedCount.toFloat() / totalAssignments.toFloat() * 100).roundToInt()
+    } else {
+        0
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = task.title,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = "${task.points} pts",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text = "$completionPercentage%",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = if (completionPercentage == 100) MaterialTheme.colorScheme.primary else LocalContentColor.current
+        )
+    }
+}
+
+
+
+@Composable
+fun TopTaskCard(task: AggregatedTask) {
+    var isExpanded by remember { mutableStateOf(false) }
+
+    val totalAssignments = task.completedCount + task.pendingCount
+
+    // Avoid division by zero if there are no assignments
+    val completionPercentage = if (totalAssignments > 0) {
+        (task.completedCount.toFloat() / totalAssignments.toFloat() * 100).roundToInt()
+    } else { 0 }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        onClick = { isExpanded = !isExpanded }
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            // Top, always-visible part
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(task.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text("${task.points} pts", style = MaterialTheme.typography.bodyMedium)
+                }
+                // --- NEW: Display the Percentage ---
+                Text("$completionPercentage%", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.width(8.dp))
+                Icon(
+                    imageVector = if (isExpanded) Icons.Default.ArrowDropDown else Icons.Default.ArrowDropDown,
+                    contentDescription = if (isExpanded) "Collapse" else "Expand"
+                )
+            }
+
+            // Expandable content
+            AnimatedVisibility(visible = isExpanded) {
+                Column(modifier = Modifier.padding(top = 16.dp)) {
+                    Divider()
+                    Spacer(Modifier.height(16.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.CheckCircle, "Completed", tint = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Completed: ${task.completedCount}")
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.CheckCircle, "Pending", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Pending: ${task.pendingCount}")
+                    }
+
+                    if (task.completedAt != null) {
+                        // If a completion date exists, show it.
+                        Text(
+                            "100% Completed on: ${formatTimestamp(task.completedAt)}",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    } else {
+                        // Otherwise, show the pending message.
+                        Text(
+                            "Pending 100% Completion",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+
+                    // --- NEW: Display the Timestamp ---
+                    task.createdAt?.let {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "Created: ${formatTimestamp(it)}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+private fun formatTimestamp(timestamp: Timestamp): String {
+    return SimpleDateFormat("MMM dd, yyyy 'at' hh:mm a", Locale.getDefault())
+        .format(timestamp.toDate())
+}
+
+
+@Composable
 fun InfoBox(label: String, value: String, isPrimary: Boolean = false) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(

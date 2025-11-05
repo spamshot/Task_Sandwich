@@ -198,7 +198,7 @@ class HomeViewModel : ViewModel(), RefreshesViewModel {
                 val batch = db.batch()
                 val taskRef = db.collection("tasks").document(task.id)
 
-                batch.update(taskRef, "status", "completed")
+                batch.update(taskRef, "status", "completed","handledAt", Timestamp.now())
 
                 val userRef = db.collection("users").document(currentUser.uid)
                 batch.update(userRef, "totalPoints", FieldValue.increment(task.points.toLong()))

@@ -148,10 +148,9 @@ fun AppNavHost(
             RoomDetailScreen(
                 roomId = roomId,
                 onNavigateBack = { navController.popBackStack() },
-                onEditRoomClick = { navController.navigate(Screen.ManageTasks.createRoute(roomId)) },
                 onCreateShopClick = { navController.navigate(Screen.CreateShopItem.createRoute(roomId)) },
-                // Wire up the new button to the correct navigation action
-                onViewShopClick = { navController.navigate(Screen.ViewShop.createRoute(roomId)) }
+                onViewShopClick = { navController.navigate(Screen.ViewShop.createRoute(roomId)) },
+                onNavigateToManageTasks = { navController.navigate(Screen.ManageTasks.createRoute(roomId)) }
             )
         }
 

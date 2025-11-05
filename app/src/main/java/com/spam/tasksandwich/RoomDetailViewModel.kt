@@ -4,6 +4,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.Firebase
+import com.google.firebase.Timestamp
 import com.google.firebase.auth.auth
 import kotlinx.coroutines.flow.update
 import com.google.firebase.firestore.firestore
@@ -13,7 +14,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
-import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.Query
 
 
@@ -22,6 +22,16 @@ data class RoomMember(
     val userId: String = "",
     val name: String = "",
     val totalPointsInGroup: Int = 0
+)
+
+data class AggregatedTask(
+    val sharedTaskId: String,
+    val title: String,
+    val points: Int,
+    val completedCount: Int,
+    val pendingCount: Int,
+    val createdAt: Timestamp? = null,
+    val completedAt: Timestamp? = null
 )
 
 // Data class representing the entire screen's state
@@ -35,6 +45,7 @@ data class RoomDetailUiState(
     val isLoading: Boolean = true,
     val error: String? = null,
     val isRoomDeleted: Boolean = false,
+    val topTasks: List<AggregatedTask> = emptyList(),
 )
 
 class RoomDetailViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
@@ -53,6 +64,7 @@ class RoomDetailViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
             fetchRoomDetails()
             listenForMembers()
             listenForTasks()
+            listenForTopTasks()
         }
     }
 
@@ -162,6 +174,53 @@ class RoomDetailViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
                         doc.getLong("points")?.toInt() ?: 0
                     }
                     _uiState.update { it.copy(totalEarnablePoints = totalPoints) }
+                }
+            }
+    }
+
+    private fun listenForTopTasks() {
+        db.collection("tasks")
+            .whereEqualTo("groupId", roomId)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    _uiState.update { it.copy(error = "Failed to load top tasks.") }
+                    return@addSnapshotListener
+                }
+                if (snapshot != null) {
+                    // Group all task documents by their shared ID
+                    val tasksBySharedId = snapshot.documents.groupBy {
+                        it.getString("sharedTaskId") ?: it.id
+                    }
+
+                    // Process each group into an AggregatedTask object
+                    val aggregatedList = tasksBySharedId.map { (_, docs) ->
+                        val firstDoc = docs.first()
+                        val completed = docs.count { it.getString("status") != "assigned" }
+                        val pendingCount = docs.count { it.getString("status") == "assigned" }
+
+                        var completionTimestamp: Timestamp? = null
+                        // If there are no pending tasks and at least one task exists...
+                        if (pendingCount == 0 && docs.isNotEmpty()) {
+                            // Find the document with the latest 'handledAt' timestamp.
+                            // The 'handledAt' field should be set when a task is marked "completed".
+                            // We need to add this to our 'markTaskComplete' function.
+                            completionTimestamp = docs
+                                .mapNotNull { it.getTimestamp("handledAt") }
+                                .maxOrNull()
+                        }
+
+                        AggregatedTask(
+                            sharedTaskId = firstDoc.getString("sharedTaskId") ?: firstDoc.id,
+                            title = firstDoc.getString("title") ?: "Unknown Task",
+                            points = firstDoc.getLong("points")?.toInt() ?: 0,
+                            completedCount = completed,
+                            pendingCount = pendingCount,
+                            createdAt = firstDoc.getTimestamp("createdAt"),
+                            completedAt = completionTimestamp
+                        )
+                    }.sortedByDescending { it.pendingCount } // Show tasks with the most pending first
+
+                    _uiState.update { it.copy(topTasks = aggregatedList) }
                 }
             }
     }
