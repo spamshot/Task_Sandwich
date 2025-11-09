@@ -150,6 +150,10 @@ fun AddSelfTaskScreen(
                     Text("Go Back")
                 }
                 Spacer(modifier = Modifier.height(16.dp))
+
+                // Task Settings Button, This is more of A Task Log
+                //todo doesn't make much sense to have a button for this here
+                //Change to tabs and only show personal task
                 TextButton(
                     onClick = { onNavigateToSettings() },
                     modifier = Modifier.fillMaxWidth()

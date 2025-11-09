@@ -18,11 +18,21 @@ import kotlinx.coroutines.tasks.await
 import java.util.UUID
 import java.util.Calendar
 
+// Data class for the auto-assign templates shown in the UI
+data class AutoAssignTaskTemplate(
+    val id: String,
+    val title: String,
+    val points: Int
+)
+
+// The complete UI state for the entire ManageTasksScreen
 data class ManageTasksUiState(
     val isLoading: Boolean = true,
     val isSaving: Boolean = false,
     val members: List<RoomMember> = emptyList(),
-    val assignedTasks: List<Task> = emptyList(),
+    val autoAssignTemplates: List<AutoAssignTaskTemplate> = emptyList(),
+    val repeatingTasks: List<Task> = emptyList(),
+    val oneTimeTasks: List<Task> = emptyList(),
     val saveSuccess: Boolean = false,
     val error: String? = null
 )
@@ -38,6 +48,7 @@ class ManageTasksViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
     init {
         listenForMembers()
         listenForAssignedTasks()
+        listenForAutoAssignTemplates()
     }
 
     private fun listenForMembers() {
@@ -45,7 +56,6 @@ class ManageTasksViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
             _uiState.update { it.copy(isLoading = false, error = "Room ID is missing.") }
             return
         }
-
         db.collection("groups").document(roomId).collection("groupMembers")
             .orderBy("joinedAt", Query.Direction.ASCENDING)
             .addSnapshotListener { snapshot, error ->
@@ -55,23 +65,26 @@ class ManageTasksViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
                 }
                 snapshot?.let { querySnapshot ->
                     viewModelScope.launch {
-                        val memberJobs = querySnapshot.documents.map { memberDoc ->
-                            async {
-                                val userDoc = db.collection("users").document(memberDoc.id).get().await()
-                                RoomMember(
-                                    userId = memberDoc.id,
-                                    name = userDoc.getString("name") ?: "Unknown User",
-                                    totalPointsInGroup = memberDoc.getLong("totalPointsInGroup")?.toInt() ?: 0
-                                )
+                        try {
+                            val memberJobs = querySnapshot.documents.map { memberDoc ->
+                                async {
+                                    val userDoc = db.collection("users").document(memberDoc.id).get().await()
+                                    RoomMember(
+                                        userId = memberDoc.id,
+                                        name = userDoc.getString("name") ?: "Unknown User",
+                                        totalPointsInGroup = 0 // Not needed for this screen
+                                    )
+                                }
                             }
+                            val memberList = memberJobs.awaitAll()
+                            _uiState.update { it.copy(members = memberList) }
+                        } catch (e: Exception) {
+                            _uiState.update { it.copy(isLoading = false, error = "Error resolving member names.") }
                         }
-                        val memberList = memberJobs.awaitAll()
-                        _uiState.update { it.copy(isLoading = false, members = memberList) }
                     }
                 }
             }
     }
-
 
     private fun listenForAssignedTasks() {
         db.collection("tasks")
@@ -80,13 +93,110 @@ class ManageTasksViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
             .orderBy("createdAt", Query.Direction.DESCENDING)
             .addSnapshotListener { snapshot, _ ->
                 if (snapshot != null) {
-                    val tasks = snapshot.documents.mapNotNull { doc ->
+                    val allTasks = snapshot.documents.mapNotNull { doc ->
                         doc.toObject(Task::class.java)?.copy(id = doc.id)
                     }
-                    // We can group them here to make the UI display easier
-                    _uiState.update { it.copy(isLoading = false, assignedTasks = tasks) }
+                    // Filter the tasks into two separate lists for the UI
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            repeatingTasks = allTasks.filter { it.repeatOption != "Never" },
+                            oneTimeTasks = allTasks.filter { it.repeatOption == "Never" }
+                        )
+                    }
                 }
             }
+    }
+
+    private fun listenForAutoAssignTemplates() {
+        db.collection("groups").document(roomId).collection("autoAssignTemplates")
+            .orderBy("createdAt", Query.Direction.DESCENDING)
+            .addSnapshotListener { snapshot, _ ->
+                if (snapshot != null) {
+                    val templates = snapshot.documents.mapNotNull { doc ->
+                        AutoAssignTaskTemplate(
+                            id = doc.id,
+                            title = doc.getString("title") ?: "",
+                            points = doc.getLong("points")?.toInt() ?: 0
+                        )
+                    }
+                    _uiState.update { it.copy(autoAssignTemplates = templates) }
+                }
+            }
+    }
+
+    fun saveTask(
+        title: String, pointsStr: String, repeatOption: String,
+        assignedTo: RoomMember?, expiresInDays: Int, isAutoAssign: Boolean
+    ) {
+        val currentUser = auth.currentUser
+        val adminName = uiState.value.members.find { it.userId == currentUser?.uid }?.name ?: "Admin"
+        if (currentUser == null || assignedTo == null || title.isBlank()) { return }
+        val points = pointsStr.toIntOrNull()
+        if (points == null || points < 0) { return }
+
+        // Perform optimistic UI update only for immediate assignments
+        if (!isAutoAssign) {
+            val representativeTaskForUi = Task(
+                id = "temp_${UUID.randomUUID()}", title = title, points = points,
+                repeatOption = repeatOption, groupId = roomId, sharedTaskId = UUID.randomUUID().toString(),
+                assignedByName = adminName,
+                dueDate = if (expiresInDays > 0) {
+                    val calendar = Calendar.getInstance()
+                    calendar.add(Calendar.DAY_OF_YEAR, expiresInDays)
+                    Timestamp(calendar.time)
+                } else { null }
+            )
+            _uiState.update { currentState ->
+                if (representativeTaskForUi.repeatOption == "Never") {
+                    currentState.copy(oneTimeTasks = listOf(representativeTaskForUi) + currentState.oneTimeTasks)
+                } else {
+                    currentState.copy(repeatingTasks = listOf(representativeTaskForUi) + currentState.repeatingTasks)
+                }
+            }
+        }
+
+        _uiState.update { it.copy(isSaving = true, error = null) }
+        viewModelScope.launch {
+            try {
+                val batch = db.batch()
+                val membersToAssign = if (assignedTo.userId == "all") {
+                    uiState.value.members.filter { it.userId != "all" }
+                } else { listOf(assignedTo) }
+
+                if (membersToAssign.isNotEmpty()) {
+                    val sharedTaskId = UUID.randomUUID().toString()
+                    val dueDate = if (expiresInDays > 0) {
+                        val calendar = Calendar.getInstance()
+                        calendar.add(Calendar.DAY_OF_YEAR, expiresInDays)
+                        Timestamp(calendar.time)
+                    } else { null }
+                    membersToAssign.forEach { member ->
+                        val newTaskRef = db.collection("tasks").document()
+                        val taskData = hashMapOf(
+                            "title" to title, "points" to points, "repeatOption" to repeatOption,
+                            "groupId" to roomId, "assignedToUserId" to member.userId,
+                            "assignedByUserId" to currentUser.uid, "assignedByName" to adminName,
+                            "status" to "assigned", "isPersonal" to false,
+                            "sharedTaskId" to sharedTaskId, "createdAt" to Timestamp.now(), "dueDate" to dueDate
+                        )
+                        batch.set(newTaskRef, taskData)
+                    }
+                }
+                if (isAutoAssign) {
+                    val templateRef = db.collection("groups").document(roomId).collection("autoAssignTemplates").document()
+                    val templateData = hashMapOf(
+                        "title" to title, "points" to points, "repeatOption" to repeatOption,
+                        "expiresInDays" to expiresInDays, "createdAt" to Timestamp.now(), "createdBy" to currentUser.uid
+                    )
+                    batch.set(templateRef, templateData)
+                }
+                batch.commit().await()
+                _uiState.update { it.copy(isSaving = false, saveSuccess = true) }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isSaving = false, error = e.message) }
+            }
+        }
     }
 
     fun deleteTask(taskId: String) {
@@ -95,103 +205,14 @@ class ManageTasksViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
         }
     }
 
-    fun saveTask(title: String, pointsStr: String, repeatOption: String, assignedTo: RoomMember?, expiresInDays: Int) {
-        val currentUser = auth.currentUser
-        // Find the admin's name from the member list to use as the 'assignedByName'
-        val adminName = uiState.value.members.find { it.userId == currentUser?.uid }?.name ?: "Admin"
-
-        // --- Validation ---
-        if (currentUser == null || assignedTo == null || title.isBlank()) {
-            _uiState.update { it.copy(error = "Please fill out all fields.") }
-            return
-        }
-        val points = pointsStr.toIntOrNull()
-        if (points == null || points < 0) {
-            _uiState.update { it.copy(error = "Please enter a valid number for points.") }
-            return
-        }
-
-        _uiState.update { it.copy(isSaving = true, error = null) }
+    fun deleteAutoAssignTemplate(templateId: String) {
         viewModelScope.launch {
-            try {
-                // Determine if we are assigning to a single person or all members.
-                val membersToAssign = if (assignedTo.userId == "all") {
-                    // Filter out the "All Members" placeholder from the list.
-                    uiState.value.members.filter { it.userId != "all" }
-                } else {
-                    // Create a list containing just the single selected member.
-                    listOf(assignedTo)
-                }
-
-                // If for some reason the list of members to assign to is empty, abort.
-                if (membersToAssign.isEmpty()) {
-                    _uiState.update { it.copy(isSaving = false, error = "No members to assign task to.") }
-                    return@launch
-                }
-
-                val sharedTaskId = UUID.randomUUID().toString()
-
-                // Create a single, representative Task object for the immediate UI update.
-                val representativeTaskForUi = Task(
-                    id = "temp_${UUID.randomUUID()}", // A temporary, unique ID for the UI key
-                    title = title,
-                    points = points,
-                    repeatOption = repeatOption,
-                    groupId = roomId,
-                    sharedTaskId = sharedTaskId,
-                    assignedByName = adminName,
-                    // Calculate the due date here to show it in the UI immediately
-                    dueDate = if (expiresInDays > 0) {
-                        val calendar = java.util.Calendar.getInstance()
-                        calendar.add(java.util.Calendar.DAY_OF_YEAR, expiresInDays)
-                        Timestamp(calendar.time)
-                    } else {
-                        null
-                    }
-                )
-
-                // --- OPTIMISTIC UI UPDATE ---
-                // This is the key fix: We immediately update the local state.
-                _uiState.update { currentState ->
-                    currentState.copy(
-                        // Prepend the new task to the front of the assigned tasks list.
-                        assignedTasks = listOf(representativeTaskForUi) + currentState.assignedTasks,
-                        saveSuccess = true, // Signal to the UI to clear the form fields.
-                        isSaving = false
-                    )
-                }
-                // ---------------------------
-
-                // --- Backend Operation ---
-                // Now, perform the actual database writes in the background.
-                val batch = db.batch()
-                membersToAssign.forEach { member ->
-                    val newTaskRef = db.collection("tasks").document()
-                    val taskData = hashMapOf(
-                        "title" to title,
-                        "points" to points,
-                        "repeatOption" to repeatOption,
-                        "groupId" to roomId,
-                        "assignedToUserId" to member.userId,
-                        "assignedByUserId" to currentUser.uid,
-                        "assignedByName" to adminName,
-                        "status" to "assigned",
-                        "isPersonal" to false,
-                        "sharedTaskId" to sharedTaskId,
-                        "createdAt" to Timestamp.now(),
-                        "dueDate" to representativeTaskForUi.dueDate // Reuse the calculated dueDate
-                    )
-                    batch.set(newTaskRef, taskData)
-                }
-                batch.commit().await()
-                // The real-time listener will eventually get the "real" data from the server,
-                // which will seamlessly replace our temporary optimistic update.
-
-            } catch (e: Exception) {
-                _uiState.update { it.copy(isSaving = false, error = e.message) }
-            }
+            db.collection("groups").document(roomId)
+                .collection("autoAssignTemplates").document(templateId)
+                .delete().await()
         }
     }
+
     fun onSaveHandled() {
         _uiState.update { it.copy(saveSuccess = false) }
     }

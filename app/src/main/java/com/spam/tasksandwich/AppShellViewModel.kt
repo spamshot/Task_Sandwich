@@ -33,7 +33,7 @@ class AppShellViewModel : ViewModel() {
     fun joinRoom(joinCode: String) {
         val currentUser = auth.currentUser
         if (currentUser == null) {
-            _uiState.update { it.copy(error = "You must be logged in.") }
+            _uiState.update { it.copy(error = "You must be logged in to join a room.") }
             return
         }
         if (joinCode.length != 6) {
@@ -43,13 +43,15 @@ class AppShellViewModel : ViewModel() {
 
         viewModelScope.launch {
             try {
-                // Find the group with the matching join code
+                // 1. Find the group document with the matching join code.
                 val groupQuery = db.collection("groups")
                     .whereEqualTo("joinCode", joinCode)
-                    .limit(1).get().await()
+                    .limit(1)
+                    .get()
+                    .await()
 
                 if (groupQuery.isEmpty) {
-                    _uiState.update { it.copy(error = "Invalid room code.") }
+                    _uiState.update { it.copy(error = "Invalid room code. Please try again.") }
                     return@launch
                 }
 
@@ -57,19 +59,70 @@ class AppShellViewModel : ViewModel() {
                 val groupId = groupDoc.id
                 val groupRef = db.collection("groups").document(groupId)
 
-                // Add user to the groupMembers subcollection
+                // 2. Fetch all auto-assign task templates for this room.
+                val templatesSnapshot = groupRef.collection("autoAssignTemplates").get().await()
+
+                // 3. Fetch the admin's name to use as the 'assignedByName' for the new tasks.
+                val adminId = groupDoc.getString("adminUserId")
+                var adminName = "Admin" // Default name
+                if (adminId != null) {
+                    val adminDoc = db.collection("users").document(adminId).get().await()
+                    if (adminDoc.exists()) {
+                        adminName = adminDoc.getString("name") ?: adminName
+                    }
+                }
+
+                // 4. Prepare all database operations in a single atomic batch write.
+                val batch = db.batch()
+
+                // Operation A: Add the new user to the room's 'groupMembers' subcollection.
+                val memberRef = groupRef.collection("groupMembers").document(currentUser.uid)
                 val newMemberData = hashMapOf(
-                    "userId" to currentUser.uid, "role" to "member", "status" to "approved",
-                    "totalPointsInGroup" to 0, "joinedAt" to Timestamp.now()
+                    "userId" to currentUser.uid,
+                    "role" to "member",
+                    "status" to "approved",
+                    "totalPointsInGroup" to 0,
+                    "joinedAt" to Timestamp.now()
                 )
-                groupRef.collection("groupMembers").document(currentUser.uid).set(newMemberData).await()
+                batch.set(memberRef, newMemberData)
 
-                // Add the room to the user's personal profile
+                // Operation B: Add the room's info to the user's personal 'groupsJoined' list.
                 val userRef = db.collection("users").document(currentUser.uid)
-                val roomInfo = hashMapOf("groupId" to groupId, "groupName" to groupDoc.getString("name"))
-                userRef.update("groupsJoined", FieldValue.arrayUnion(roomInfo)).await()
+                val roomInfo = hashMapOf(
+                    "groupId" to groupId,
+                    "groupName" to groupDoc.getString("name")
+                )
+                batch.update(userRef, "groupsJoined", FieldValue.arrayUnion(roomInfo))
 
-                // Signal success to the UI with the groupId
+                // Operation C: For each template, create a new task document assigned to the new user.
+                templatesSnapshot.documents.forEach { templateDoc ->
+                    val newTaskRef = db.collection("tasks").document()
+                    val taskData = templateDoc.data!! // Get all data from the template
+
+                    // Add/overwrite fields to make it a specific assignment
+                    taskData["groupId"] = groupId
+                    taskData["assignedToUserId"] = currentUser.uid
+                    taskData["assignedByUserId"] = adminId
+                    taskData["assignedByName"] = adminName
+                    taskData["status"] = "assigned"
+                    taskData["isPersonal"] = false
+                    taskData["createdAt"] = Timestamp.now() // Set a fresh creation date
+
+                    // Recalculate the due date based on when the user joined.
+                    val expiresInDays = templateDoc.getLong("expiresInDays")?.toInt() ?: 0
+                    if (expiresInDays > 0) {
+                        val calendar = java.util.Calendar.getInstance()
+                        calendar.add(java.util.Calendar.DAY_OF_YEAR, expiresInDays)
+                        taskData["dueDate"] = Timestamp(calendar.time)
+                    }
+
+                    batch.set(newTaskRef, taskData)
+                }
+
+                // 5. Commit all operations at once.
+                batch.commit().await()
+
+                // 6. Signal success to the UI with the groupId to trigger navigation.
                 _uiState.update { it.copy(newlyJoinedRoomId = groupId, error = null) }
 
             } catch (e: Exception) {

@@ -41,23 +41,21 @@ fun ManageTasksScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
-    // State to manage which tab is currently selected
     var selectedTabIndex by remember { mutableStateOf(0) }
     val tabs = listOf("Assign New", "Manage Assigned")
 
     Scaffold(
-//        topBar = {
-//            TopAppBar(
-//                title = { Text("Manage Tasks") },
-//                navigationIcon = {
-//                    IconButton(onClick = onNavigateBack) {
-//                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Go Back")
-//                    }
-//                }
-//            )
-//        }
+        topBar = {
+            TopAppBar(
+                title = { Text("Manage Tasks") },
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Go Back")
+                    }
+                }
+            )
+        }
     ) { paddingValues ->
-
         Column(modifier = Modifier.padding(paddingValues)) {
             TabRow(selectedTabIndex = selectedTabIndex) {
                 tabs.forEachIndexed { index, title ->
@@ -69,7 +67,6 @@ fun ManageTasksScreen(
                 }
             }
 
-            // The content of the selected tab
             when (selectedTabIndex) {
                 0 -> AssignTaskForm(uiState = uiState, viewModel = viewModel)
                 1 -> AssignedTasksList(uiState = uiState, viewModel = viewModel)
@@ -106,47 +103,41 @@ fun AssignTaskForm(uiState: ManageTasksUiState, viewModel: ManageTasksViewModel)
         listOf(RoomMember(userId = "all", name = "All Members")) + uiState.members
     }
 
+    val autoAssignOptions = listOf("No", "Yes")
+    var selectedAutoAssign by rememberSaveable { mutableStateOf(autoAssignOptions[0]) }
+    var isAutoAssignDropdownExpanded by remember { mutableStateOf(false) }
+
     val isExpirationEnabled = selectedRepeatOption == "Never"
-    LaunchedEffect(selectedRepeatOption) {
-        if (!isExpirationEnabled) {
-            selectedExpiration = expiresInOptions[0]
-        }
-    }
+    val isAutoAssignEnabled = selectedAssignee?.userId == "all"
+
+    LaunchedEffect(selectedRepeatOption) { if (!isExpirationEnabled) selectedExpiration = expiresInOptions[0] }
+    LaunchedEffect(selectedAssignee) { if (!isAutoAssignEnabled) selectedAutoAssign = autoAssignOptions[0] }
 
     LaunchedEffect(uiState.saveSuccess) {
         if (uiState.saveSuccess) {
-            scope.launch { snackbarHostState.showSnackbar("Task(s) assigned successfully!") }
+            scope.launch { snackbarHostState.showSnackbar("Action successful!") }
             viewModel.onSaveHandled()
-            title = ""
-            points = ""
-            selectedAssignee = null
-            selectedRepeatOption = repeatOptions[0]
-            selectedExpiration = expiresInOptions[0]
+            title = ""; points = ""; selectedAssignee = null; selectedRepeatOption = repeatOptions[0]
+            selectedExpiration = expiresInOptions[0]; selectedAutoAssign = autoAssignOptions[0]
         }
     }
 
-    // A nested Scaffold is used here to provide a SnackbarHost just for this form.
     Scaffold(snackbarHost = { SnackbarHost(hostState = snackbarHostState) }) { padding ->
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(16.dp)
-                .verticalScroll(rememberScrollState()),
+            modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp).verticalScroll(rememberScrollState()),
         ) {
             OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Task Name") }, modifier = Modifier.fillMaxWidth())
             Spacer(Modifier.height(16.dp))
             OutlinedTextField(value = points, onValueChange = { points = it }, label = { Text("Points") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth())
             Spacer(Modifier.height(16.dp))
 
-            // Repeat Dropdown
             ExposedDropdownMenuBox(
                 expanded = isRepeatDropdownExpanded,
                 onExpandedChange = { isRepeatDropdownExpanded = it }
             ) {
                 OutlinedTextField(
                     value = selectedRepeatOption,
-                    onValueChange = {}, // onValueChange is empty because it's a read-only field
+                    onValueChange = {}, // onValueChange is empty because this field is read-only
                     readOnly = true,
                     label = { Text("Repeat") },
                     trailingIcon = {
@@ -176,14 +167,14 @@ fun AssignTaskForm(uiState: ManageTasksUiState, viewModel: ManageTasksViewModel)
                 }
             }
 
+
             Spacer(Modifier.height(16.dp))
 
 
-
-            // Expires In Dropdown
+            //DopDown for expiration
             ExposedDropdownMenuBox(
                 expanded = isExpirationDropdownExpanded,
-                // The dropdown can only be expanded if it's enabled
+                // The dropdown can only be expanded if the 'isExpirationEnabled' flag is true.
                 onExpandedChange = { if (isExpirationEnabled) isExpirationDropdownExpanded = it }
             ) {
                 OutlinedTextField(
@@ -191,30 +182,30 @@ fun AssignTaskForm(uiState: ManageTasksUiState, viewModel: ManageTasksViewModel)
                     onValueChange = {},
                     readOnly = true,
                     label = { Text("Expires In") },
-                    // This visually grays out the text field when the "Repeat" option is not "Never"
+                    // This visually grays out the text field and disables interaction
+                    // when the "Repeat" option is not "Never".
                     enabled = isExpirationEnabled,
                     trailingIcon = {
                         ExposedDropdownMenuDefaults.TrailingIcon(expanded = isExpirationDropdownExpanded)
                     },
-
                     colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .menuAnchor()
+                        .menuAnchor() // Anchors the dropdown to this text field.
                 )
 
-                // This is the content of the dropdown menu itself
+                // This is the content of the dropdown menu itself.
                 ExposedDropdownMenu(
                     expanded = isExpirationDropdownExpanded,
-                    onDismissRequest = { isExpirationDropdownExpanded = false } // Close when clicking outside
+                    onDismissRequest = { isExpirationDropdownExpanded = false } // Close when clicking outside.
                 ) {
-                    // Create a menu item for each option in our list of Pairs
+                    // Create a menu item for each option in our list of Pairs.
                     expiresInOptions.forEach { option ->
                         DropdownMenuItem(
-                            text = { Text(option.first) }, // Display the string part
+                            text = { Text(option.first) }, // Display the string part (e.g., "7 Days").
                             onClick = {
-                                selectedExpiration = option // Update the state with the selected Pair
-                                isExpirationDropdownExpanded = false // Close the menu
+                                selectedExpiration = option // Update the state with the selected Pair.
+                                isExpirationDropdownExpanded = false // Close the menu.
                             }
                         )
                     }
@@ -223,7 +214,8 @@ fun AssignTaskForm(uiState: ManageTasksUiState, viewModel: ManageTasksViewModel)
 
             Spacer(Modifier.height(16.dp))
 
-            // Assignee Dropdown
+
+            //DropDown for assignee
             ExposedDropdownMenuBox(
                 expanded = isAssigneeDropdownExpanded,
                 onExpandedChange = { isAssigneeDropdownExpanded = it }
@@ -261,59 +253,156 @@ fun AssignTaskForm(uiState: ManageTasksUiState, viewModel: ManageTasksViewModel)
                     }
                 }
             }
+            Spacer(Modifier.height(16.dp))
 
+
+            //DropDown for auto assign
+            ExposedDropdownMenuBox(
+                expanded = isAutoAssignDropdownExpanded,
+                // The dropdown can only be expanded if it's enabled.
+                onExpandedChange = { if (isAutoAssignEnabled) isAutoAssignDropdownExpanded = it }
+            ) {
+                OutlinedTextField(
+                    value = selectedAutoAssign,
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Auto Assign to New Members") },
+                    // This visually grays out the text field if "All Members" is not selected.
+                    enabled = isAutoAssignEnabled,
+                    trailingIcon = {
+                        ExposedDropdownMenuDefaults.TrailingIcon(expanded = isAutoAssignDropdownExpanded)
+                    },
+                    colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .menuAnchor() // Anchors the dropdown to this text field.
+                )
+
+                // This is the content of the dropdown menu itself.
+                ExposedDropdownMenu(
+                    expanded = isAutoAssignDropdownExpanded,
+                    onDismissRequest = { isAutoAssignDropdownExpanded = false } // Close when clicking outside.
+                ) {
+                    // Create a menu item for each option ("Yes" or "No").
+                    autoAssignOptions.forEach { option ->
+                        DropdownMenuItem(
+                            text = { Text(option) },
+                            onClick = {
+                                selectedAutoAssign = option // Update the state with the new selection.
+                                isAutoAssignDropdownExpanded = false // Close the menu.
+                            }
+                        )
+                    }
+                }
+            }
             Spacer(Modifier.weight(1f))
             Button(
                 onClick = {
                     viewModel.saveTask(
                         title = title, pointsStr = points, repeatOption = selectedRepeatOption,
-                        assignedTo = selectedAssignee, expiresInDays = selectedExpiration.second
+                        assignedTo = selectedAssignee, expiresInDays = selectedExpiration.second,
+                        isAutoAssign = selectedAutoAssign == "Yes"
                     )
                 },
                 enabled = !uiState.isSaving && selectedAssignee != null && title.isNotBlank() && points.isNotBlank(),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                if (uiState.isSaving) CircularProgressIndicator(Modifier.size(24.dp)) else Text("Assign Task")
+                if (uiState.isSaving) CircularProgressIndicator(Modifier.size(24.dp)) else Text("Save Task")
             }
         }
     }
 }
+
 /**
- * The content for the "Manage Assigned" tab, showing a list of active tasks.
+ * The content for the "Manage Assigned" tab, showing three distinct sections.
  */
 @Composable
 fun AssignedTasksList(uiState: ManageTasksUiState, viewModel: ManageTasksViewModel) {
-    val groupedTasks = remember(uiState.assignedTasks) {
-        uiState.assignedTasks.groupBy { it.sharedTaskId ?: it.id }
+    val groupedOneTimeTasks = remember(uiState.oneTimeTasks) {
+        uiState.oneTimeTasks.groupBy { it.sharedTaskId ?: it.id }
+    }
+    val groupedRepeatingTasks = remember(uiState.repeatingTasks) {
+        uiState.repeatingTasks.groupBy { it.sharedTaskId ?: it.id }
     }
 
     if (uiState.isLoading) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-    } else if (groupedTasks.isEmpty()) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("No tasks are currently assigned.")
-        }
     } else {
-        LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            items(items = groupedTasks.entries.toList(), key = { it.key }) { (_, tasks) ->
-                val representativeTask = tasks.first()
-                AssignedTaskCard(
-                    task = representativeTask,
-                    assignedCount = tasks.size,
-                    onDelete = {
-                        tasks.forEach { taskToDelete ->
-                            viewModel.deleteTask(taskToDelete.id)
-                        }
-                    }
-                )
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // Section 1: Auto-Assign Tasks
+            item { Text("Auto-Assign Tasks (for new members)", style = MaterialTheme.typography.titleLarge) }
+            if (uiState.autoAssignTemplates.isEmpty()) {
+                item { Text("None.", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            } else {
+                items(uiState.autoAssignTemplates, key = { it.id }) { template ->
+                    AutoAssignTaskCard(
+                        template = template,
+                        onDelete = { viewModel.deleteAutoAssignTemplate(template.id) }
+                    )
+                }
+            }
+
+            // Section 2: Repeating Tasks
+            item {
+                Divider(modifier = Modifier.padding(vertical = 16.dp))
+                Text("Repeating Tasks", style = MaterialTheme.typography.titleLarge)
+            }
+            if (groupedRepeatingTasks.isEmpty()) {
+                item { Text("None.", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            } else {
+                items(groupedRepeatingTasks.entries.toList(), key = { it.key }) { (_, tasks) ->
+                    val representativeTask = tasks.first()
+                    AssignedTaskCard(
+                        task = representativeTask,
+                        assignedCount = tasks.size,
+                        onDelete = { tasks.forEach { viewModel.deleteTask(it.id) } }
+                    )
+                }
+            }
+
+            // Section 3: One-Time Assigned Tasks
+            item {
+                Divider(modifier = Modifier.padding(vertical = 16.dp))
+                Text("One-Time Assigned Tasks", style = MaterialTheme.typography.titleLarge)
+            }
+            if (groupedOneTimeTasks.isEmpty()) {
+                item { Text("None.", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            } else {
+                items(groupedOneTimeTasks.entries.toList(), key = { it.key }) { (_, tasks) ->
+                    val representativeTask = tasks.first()
+                    AssignedTaskCard(
+                        task = representativeTask,
+                        assignedCount = tasks.size,
+                        onDelete = { tasks.forEach { viewModel.deleteTask(it.id) } }
+                    )
+                }
             }
         }
     }
 }
 
-/**
- * A card for displaying a single assigned task in the management list.
- */
+@Composable
+fun AutoAssignTaskCard(template: AutoAssignTaskTemplate, onDelete: () -> Unit) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(template.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text("Points: ${template.points}", style = MaterialTheme.typography.bodyMedium)
+            }
+            OutlinedButton(onClick = onDelete) {
+                Text("Remove")
+            }
+        }
+    }
+}
+
 @Composable
 fun AssignedTaskCard(task: Task, assignedCount: Int, onDelete: () -> Unit) {
     Card(modifier = Modifier.fillMaxWidth()) {
@@ -324,28 +413,15 @@ fun AssignedTaskCard(task: Task, assignedCount: Int, onDelete: () -> Unit) {
             task.dueDate?.let {
                 Text("Expires: ${formatTimestamp(it)}", style = MaterialTheme.typography.bodyMedium)
             }
-            Text(
-                "Assigned to: ${if (assignedCount > 1) "$assignedCount members" else "1 member"}",
-                style = MaterialTheme.typography.bodyMedium
-            )
+            Text("Assigned to: ${if (assignedCount > 1) "$assignedCount members" else "1 member"}", style = MaterialTheme.typography.bodyMedium)
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
-                // TODO: Add an Edit button here later
-                OutlinedButton(onClick = onDelete) {
-                    Text("Cancel Task")
-                }
+                OutlinedButton(onClick = onDelete) { Text("Cancel Task") }
             }
         }
     }
 }
 
-
-// A helper function to format the dueDate Timestamp
 private fun formatTimestamp(timestamp: Timestamp): String {
     return SimpleDateFormat("MMM dd, yyyy", Locale.getDefault()).format(timestamp.toDate())
-}
-
-@Composable
-fun Bob(){
-
 }
