@@ -3,6 +3,7 @@ package com.spam.tasksandwich
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -17,6 +18,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
@@ -35,13 +37,14 @@ import java.util.Locale
 @Composable
 fun ProfileSettingsScreen(
     onLogoutSuccess: () -> Unit,
+    onNavigateToEdit: (String) -> Unit,
     viewModel: ProfileSettingsViewModel = viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
     // State to manage which tab is currently selected
     var selectedTabIndex by remember { mutableStateOf(0) }
-    val tabs = listOf("Settings", "Transaction Log")
+    val tabs = listOf("Settings", "Transaction Log", "Task History")
 
     // This effect handles the navigation callback on successful logout.
     LaunchedEffect(uiState.logoutSuccess) {
@@ -65,6 +68,7 @@ fun ProfileSettingsScreen(
         when (selectedTabIndex) {
             0 -> ProfileSettingsForm(uiState = uiState, viewModel = viewModel)
             1 -> TransactionLogList(history = uiState.purchaseHistory)
+            2 -> TaskHistoryList(uiState = uiState, viewModel = viewModel, onNavigateToEdit = onNavigateToEdit)
         }
     }
 }
@@ -130,9 +134,11 @@ fun ProfileSettingsForm(uiState: ProfileSettingsUiState, viewModel: ProfileSetti
 
                 Spacer(Modifier.weight(1f)) // Pushes buttons to the bottom
 
-                if (uiState.error != null) {
-                    Text(uiState.error!!, color = MaterialTheme.colorScheme.error)
-                }
+
+                //Not the right spot always shows error
+//                if (uiState.error != null) {
+//                    Text(uiState.error, color = MaterialTheme.colorScheme.error)
+//                }
                 Spacer(Modifier.height(8.dp))
 
                 Button(
@@ -169,6 +175,82 @@ fun TransactionLogList(history: List<UserPurchaseLogItem>) {
                 TransactionHistoryItem(purchase = purchase)
                 Divider()
             }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun TaskHistoryList(
+    uiState: ProfileSettingsUiState,
+    viewModel: ProfileSettingsViewModel,
+    onNavigateToEdit: (String) -> Unit
+) {
+    var taskToAction by remember { mutableStateOf<Task?>(null) }
+
+    // Confirmation Dialog for Edit/Delete
+    if (taskToAction != null) {
+        AlertDialog(
+            onDismissRequest = { taskToAction = null },
+            title = { Text("Task Options") },
+            text = { Text("What would you like to do with '${taskToAction!!.title}'?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onNavigateToEdit(taskToAction!!.id)
+                        taskToAction = null
+                    }
+                ) { Text("Edit") }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(
+                        onClick = {
+                            viewModel.deleteTask(taskToAction!!.id)
+                            taskToAction = null
+                        }
+                    ) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+                    TextButton(onClick = { taskToAction = null }) { Text("Cancel") }
+                }
+            }
+        )
+    }
+
+    Scaffold(
+    ) { paddingValues ->
+        if (uiState.isLoading) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize().padding(paddingValues),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(uiState.tasks) { task ->
+                    TaskLogItem(
+                        task = task,
+                        onLongPress = { taskToAction = task }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun TaskLogItem(task: Task, onLongPress: () -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .pointerInput(Unit) {
+                detectTapGestures(onLongPress = { onLongPress() })
+            }
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            Text(task.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(4.dp))
+            Text("Points: ${task.points}", style = MaterialTheme.typography.bodyMedium)
+            Text("Repeats: ${task.repeatOption}", style = MaterialTheme.typography.bodyMedium)
         }
     }
 }

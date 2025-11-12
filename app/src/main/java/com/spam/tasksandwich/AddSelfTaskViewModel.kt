@@ -64,7 +64,7 @@ class AddSelfTaskViewModel : ViewModel() {
             _uiState.update { it.copy(error = "Task name cannot be empty.") }
             return
         }
-        val points = pointsStr.toIntOrNull()
+        val points = pointsStr.ifBlank { "0" }.toIntOrNull()
         if (points == null || points < 0) {
             _uiState.update { it.copy(error = "Please enter a valid, non-negative number for points.") }
             return

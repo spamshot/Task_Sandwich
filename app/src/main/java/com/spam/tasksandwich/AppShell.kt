@@ -122,8 +122,8 @@ fun AppShell(
                 ) { Text("Join") }
             },
             dismissButton = {
-                TextButton(onClick = {
-                    showJoinRoomDialog = false
+                TextButton(onClick = { 
+                    showJoinRoomDialog = false 
                     appShellViewModel.clearError()
                 }) { Text("Cancel") }
             }
@@ -144,7 +144,6 @@ fun AppShell(
         Screen.AddSelfTask.route -> "Add Personal Task"
         Screen.JoinRoom.route -> "Join a Room"
         Screen.ProfileSettings.route -> "Profile Settings"
-        Screen.TaskSettings.route -> "Task Settings"
         Screen.ManageTasks.route -> "Manage Tasks"
         Screen.CreateShopItem.route -> "Manage Shop Items"
         Screen.ViewShop.route -> "Room Shop"

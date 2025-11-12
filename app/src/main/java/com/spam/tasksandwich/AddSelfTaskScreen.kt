@@ -76,7 +76,7 @@ fun AddSelfTaskScreen(
                 OutlinedTextField(
                     value = points,
                     onValueChange = { points = it },
-                    label = { Text("Points") },
+                    label = { Text("Points (Optional)") },
                     modifier = Modifier.fillMaxWidth(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true
@@ -154,12 +154,12 @@ fun AddSelfTaskScreen(
                 // Task Settings Button, This is more of A Task Log
                 //todo doesn't make much sense to have a button for this here
                 //Change to tabs and only show personal task
-                TextButton(
-                    onClick = { onNavigateToSettings() },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Task Settings")
-                }
+//                TextButton(
+//                    onClick = { onNavigateToSettings() },
+//                    modifier = Modifier.fillMaxWidth()
+//                ) {
+//                    Text("Task Settings")
+//                }
                 Spacer(modifier = Modifier.height(16.dp))
             }
             }

@@ -92,13 +92,14 @@ fun HomeDashboard(
     onCompleteTask: (Task) -> Unit,
     onRoomClick: (String) -> Unit
 ) {
+    val totalTasks = uiState.groupedTasks.values.sumOf { it.size }
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp)
     ) {
         // --- ROOMS SECTION ---
-        Text("My Rooms", style = MaterialTheme.typography.headlineSmall)
+        Text("My Rooms (${uiState.rooms.size})", style = MaterialTheme.typography.headlineSmall)
         Spacer(modifier = Modifier.height(8.dp))
         // This LazyColumn will only grow up to 200.dp in height.
         LazyColumn(
@@ -115,7 +116,7 @@ fun HomeDashboard(
         Spacer(modifier = Modifier.height(24.dp))
 
         // --- TASKS SECTION ---
-        Text("My Tasks", style = MaterialTheme.typography.headlineSmall)
+        Text("My Tasks ($totalTasks)", style = MaterialTheme.typography.headlineSmall)
         Spacer(modifier = Modifier.height(8.dp))
         if (uiState.groupedTasks.isEmpty()) {
             Box(

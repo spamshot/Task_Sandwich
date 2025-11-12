@@ -26,7 +26,6 @@ sealed class Screen(val route: String) {
     object AddSelfTask : Screen("add_self_task_screen")
     object JoinRoom : Screen("join_room_screen")
     object ProfileSettings : Screen("profile_settings_screen")
-    object TaskSettings : Screen("task_settings_screen")
     object CreateRoom : Screen("create_room_screen")
 
 
@@ -92,53 +91,24 @@ fun AppNavHost(
         }
 
         composable(Screen.ProfileSettings.route) {
-            ProfileSettingsScreen(onLogoutSuccess = {
-                navController.navigate(Screen.Auth.route) {
-                    popUpTo(navController.graph.id) { inclusive = true }
+            ProfileSettingsScreen(
+                onLogoutSuccess = {
+                    navController.navigate(Screen.Auth.route) {
+                        popUpTo(navController.graph.id) { inclusive = true }
+                    }
+                },
+                onNavigateToEdit = {
+                    navController.navigate(Screen.EditTask.createRoute(it))
                 }
-            })
+            )
         }
 
         composable(Screen.AddSelfTask.route) {
             AddSelfTaskScreen(
                 onGoBack = { navController.popBackStack() },
-                onNavigateToSettings = { navController.navigate(Screen.TaskSettings.route) }
+                onNavigateToSettings = { navController.navigate(Screen.ProfileSettings.route) }
             )
         }
-
-        composable(Screen.TaskSettings.route) {
-            TaskSettingsScreen(
-                onNavigateBack = { navController.popBackStack() },
-                onNavigateToEdit = { taskId ->
-                    navController.navigate(Screen.EditTask.createRoute(taskId))
-                }
-            )
-        }
-
-//            composable(Screen.JoinRoom.route) {
-//                JoinRoomScreen(onJoinSuccess = { roomId ->
-//                    navController.navigate(Screen.RoomDetail.createRoute(roomId)) {
-//                        popUpTo(Screen.JoinRoom.route) { inclusive = true }
-//                    }
-//                })
-//            }
-
-//            composable(Screen.CreateRoom.route) {
-//                CreateRoomScreen(
-//                    onRoomCreated = { roomId ->
-//                        // This is the new, safer navigation logic.
-//                        navController.navigate(Screen.RoomDetail.createRoute(roomId)) {
-//                            // Pop up to the CreateRoom screen and remove it from the back stack.
-//                            // This prevents the user from pressing "back" and ending up
-//                            // on the form to create the same room again.
-//                            popUpTo(Screen.CreateRoom.route) {
-//                                inclusive = true
-//                            }
-//                        }
-//                    }
-//                )
-//            }
-
 
         composable(
             route = Screen.RoomDetail.route,
@@ -157,8 +127,7 @@ fun AppNavHost(
         composable(
             route = Screen.EditTask.route,
             arguments = listOf(navArgument("taskId") { type = NavType.StringType })
-        ) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        ) {            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text("Edit Task Screen (Placeholder)")
             }
         }

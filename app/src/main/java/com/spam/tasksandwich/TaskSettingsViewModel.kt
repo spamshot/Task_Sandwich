@@ -26,10 +26,10 @@ class TaskSettingsViewModel : ViewModel() {
     val uiState = _uiState.asStateFlow()
 
     init {
-        fetchCreatedTasks()
+        fetchAssignedTasks()
     }
 
-    private fun fetchCreatedTasks() {
+    private fun fetchAssignedTasks() {
         val currentUser = auth.currentUser
         if (currentUser == null) {
             _uiState.update { it.copy(isLoading = false, error = "User not logged in.") }
@@ -38,7 +38,7 @@ class TaskSettingsViewModel : ViewModel() {
 
         // Query for all tasks created by the current user, order by most recent
         db.collection("tasks")
-            .whereEqualTo("assignedByUserId", currentUser.uid)
+            .whereEqualTo("assignedToUserId", currentUser.uid)
             .orderBy("createdAt", Query.Direction.DESCENDING)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
