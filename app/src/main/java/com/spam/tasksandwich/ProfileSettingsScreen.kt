@@ -19,7 +19,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -28,8 +27,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.firebase.Timestamp
 import kotlinx.coroutines.launch
-import kotlin.collections.mapOf
-import com.spam.tasksandwich.R
 import java.text.SimpleDateFormat
 import java.util.Locale
 
@@ -131,6 +128,9 @@ fun ProfileSettingsForm(uiState: ProfileSettingsUiState, viewModel: ProfileSetti
                 OutlinedTextField(value = age, onValueChange = { age = it }, label = { Text("Age") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth())
                 Spacer(Modifier.height(16.dp))
                 OutlinedTextField(value = email, onValueChange = { email = it }, label = { Text("Email") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email), modifier = Modifier.fillMaxWidth())
+
+                UserCard(name = name, email = email, selectedIconId = selectedIconId)
+
 
                 Spacer(Modifier.weight(1f)) // Pushes buttons to the bottom
 
@@ -366,4 +366,56 @@ fun IconSelector(selectedIconId: String, onIconSelected: (String) -> Unit) {
 // Helper function to format a Timestamp into a readable date string.
 private fun formatTimestamp(timestamp: Timestamp): String {
     return SimpleDateFormat("MMM dd, yyyy", Locale.getDefault()).format(timestamp.toDate())
+}
+
+// UserCard just a demo for Profile card view
+@Composable
+fun UserCard(name: String, email: String, selectedIconId: String) {
+    val presetIconMap = remember {
+        mapOf(
+            "avatar_1" to R.drawable.carrotdog,
+            "avatar_2" to R.drawable.dallebabyface,
+            "avatar_3" to R.drawable.fglasses,
+            "avatar_4" to R.drawable.firehairguy,
+            "avatar_5" to R.drawable.vgfbhbluehair
+        )
+    }
+    val iconResId = presetIconMap[selectedIconId] ?: R.drawable.carrotdog // Default icon
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 24.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Image(
+                painter = painterResource(id = iconResId),
+                contentDescription = "User Avatar",
+                modifier = Modifier
+                    .size(60.dp)
+                    .clip(CircleShape)
+            )
+
+            Spacer(modifier = Modifier.width(16.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = name,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = email,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
 }

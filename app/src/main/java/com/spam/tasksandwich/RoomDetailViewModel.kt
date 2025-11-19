@@ -24,6 +24,11 @@ data class RoomMember(
     val totalPointsInGroup: Int = 0
 )
 
+data class TaskCompletionDetails(
+    val userName: String,
+    val status: String
+)
+
 data class AggregatedTask(
     val sharedTaskId: String,
     val title: String,
@@ -31,7 +36,8 @@ data class AggregatedTask(
     val completedCount: Int,
     val pendingCount: Int,
     val createdAt: Timestamp? = null,
-    val completedAt: Timestamp? = null
+    val completedAt: Timestamp? = null,
+    val completions: List<TaskCompletionDetails> = emptyList()
 )
 
 // Data class representing the entire screen's state
@@ -187,43 +193,52 @@ class RoomDetailViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
                     return@addSnapshotListener
                 }
                 if (snapshot != null) {
-                    // Group all task documents by their shared ID
-                    val tasksBySharedId = snapshot.documents.groupBy {
-                        it.getString("sharedTaskId") ?: it.id
-                    }
-
-                    // Process each group into an AggregatedTask object
-                    val aggregatedList = tasksBySharedId.map { (_, docs) ->
-                        val firstDoc = docs.first()
-                        val completed = docs.count { it.getString("status") != "assigned" }
-                        val pendingCount = docs.count { it.getString("status") == "assigned" }
-
-                        var completionTimestamp: Timestamp? = null
-                        // If there are no pending tasks and at least one task exists...
-                        if (pendingCount == 0 && docs.isNotEmpty()) {
-                            // Find the document with the latest 'handledAt' timestamp.
-                            // The 'handledAt' field should be set when a task is marked "completed".
-                            // We need to add this to our 'markTaskComplete' function.
-                            completionTimestamp = docs
-                                .mapNotNull { it.getTimestamp("handledAt") }
-                                .maxOrNull()
+                    viewModelScope.launch {
+                        val tasksBySharedId = snapshot.documents.groupBy {
+                            it.getString("sharedTaskId") ?: it.id
                         }
 
-                        AggregatedTask(
-                            sharedTaskId = firstDoc.getString("sharedTaskId") ?: firstDoc.id,
-                            title = firstDoc.getString("title") ?: "Unknown Task",
-                            points = firstDoc.getLong("points")?.toInt() ?: 0,
-                            completedCount = completed,
-                            pendingCount = pendingCount,
-                            createdAt = firstDoc.getTimestamp("createdAt"),
-                            completedAt = completionTimestamp
-                        )
-                    }.sortedByDescending { it.pendingCount } // Show tasks with the most pending first
+                        val aggregatedListJobs = tasksBySharedId.map { (_, docs) ->
+                            async {
+                                val firstDoc = docs.first()
+                                val completed = docs.count { it.getString("status") != "assigned" }
+                                val pendingCount = docs.count { it.getString("status") == "assigned" }
 
-                    _uiState.update { it.copy(topTasks = aggregatedList) }
+                                var completionTimestamp: Timestamp? = null
+                                if (pendingCount == 0 && docs.isNotEmpty()) {
+                                    completionTimestamp = docs.mapNotNull { it.getTimestamp("handledAt") }.maxOrNull()
+                                }
+
+                                // --- Admin View: Fetch completion details ---
+                                val completionDetailsJobs = docs.map { doc ->
+                                    async {
+                                        val userId = doc.getString("assignedToUserId") ?: ""
+                                        val status = doc.getString("status") ?: "Unknown"
+                                        val userDoc = db.collection("users").document(userId).get().await()
+                                        val userName = userDoc.getString("name") ?: "Unknown User"
+                                        TaskCompletionDetails(userName, status)
+                                    }
+                                }
+
+                                AggregatedTask(
+                                    sharedTaskId = firstDoc.getString("sharedTaskId") ?: firstDoc.id,
+                                    title = firstDoc.getString("title") ?: "Unknown Task",
+                                    points = firstDoc.getLong("points")?.toInt() ?: 0,
+                                    completedCount = completed,
+                                    pendingCount = pendingCount,
+                                    createdAt = firstDoc.getTimestamp("createdAt"),
+                                    completedAt = completionTimestamp,
+                                    completions = completionDetailsJobs.awaitAll()
+                                )
+                            }
+                        }
+                        val aggregatedList = aggregatedListJobs.awaitAll().sortedByDescending { it.pendingCount }
+                        _uiState.update { it.copy(topTasks = aggregatedList) }
+                    }
                 }
             }
     }
+
 
     fun kickMember(userIdToKick: String) {
         val currentUser = auth.currentUser ?: return

@@ -4,6 +4,7 @@ package com.spam.tasksandwich
 
 import android.R.id.tabs
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -187,9 +188,138 @@ fun RoomDetailScreen(
                         onMemberLongPress = { memberToKick = it }
                     )
 
-                    1 -> TopTasksTab(topTasks = uiState.topTasks)
+                    1 -> TopTasksTab(uiState = uiState)
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun EditRoomDialog(
+    currentRoomName: String,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit,
+    onDelete: () -> Unit
+) {
+    var newName by remember { mutableStateOf(currentRoomName) }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("Delete Room") },
+            text = { Text("Are you sure you want to permanently delete this room? This action cannot be undone.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onDelete()
+                        showDeleteConfirm = false
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) { Text("DELETE") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) { Text("Cancel") }
+            }
+        )
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Edit Room") },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = newName,
+                    onValueChange = { newName = it },
+                    label = { Text("Room Name") }
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onSave(newName) },
+                enabled = newName.isNotBlank() && newName != currentRoomName
+            ) {
+                Text("Save")
+            }
+        },
+        dismissButton = {
+            Row {
+                TextButton(
+                    onClick = { showDeleteConfirm = true },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Delete Room")
+                }
+                Spacer(modifier = Modifier.weight(1f))
+                TextButton(onClick = onDismiss) { Text("Cancel") }
+            }
+        }
+    )
+}
+
+@Composable
+fun InfoBox(label: String, value: String, isPrimary: Boolean = false) {
+    val backgroundColor = if (isPrimary) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
+    val textColor = if (isPrimary) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+
+    Card(
+        modifier = Modifier.padding(4.dp),
+        colors = CardDefaults.cardColors(containerColor = backgroundColor)
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(text = label, style = MaterialTheme.typography.labelSmall, color = textColor)
+            Text(text = value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = textColor)
+        }
+    }
+}
+
+@Composable
+fun MemberListItem(rank: Int, member: RoomMember, isFirstPlace: Boolean, onLongPress: () -> Unit) {
+    // Change the color of the card based on the rank
+    val cardColors = if (isFirstPlace) {
+        CardDefaults.cardColors(
+            // Use a distinct, theme-aware color for emphasis.
+            containerColor = colorResource(id = R.color.first_greenLight))
+    } else {
+        CardDefaults.cardColors()
+    }
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onLongPress = { onLongPress() }
+                )
+            },
+        colors = cardColors
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "$rank.",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.width(32.dp)
+            )
+            Text(
+                text = member.name,
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                text = "${member.totalPointsInGroup} pts",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
         }
     }
 }
@@ -253,7 +383,8 @@ fun LeaderboardTabContent(
 }
 
 @Composable
-fun TopTasksTab(topTasks: List<AggregatedTask>) {
+fun TopTasksTab(uiState: RoomDetailUiState) {
+    val topTasks = uiState.topTasks
     val completedTasks = topTasks
         .filter { it.pendingCount == 0 && it.completedAt != null }
         .sortedByDescending { it.completedAt }
@@ -269,14 +400,11 @@ fun TopTasksTab(topTasks: List<AggregatedTask>) {
             Text("No tasks have been assigned in this room yet.")
         }
     } else {
-        // Use a LazyColumn as the root for the entire tab. This is the most efficient
-        // way to display multiple sections that might scroll off-screen.
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // --- Section 1: In Progress Card ---
             item {
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column {
@@ -293,7 +421,7 @@ fun TopTasksTab(topTasks: List<AggregatedTask>) {
                         } else {
                             Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                                 pendingTasks.forEach { task ->
-                                    CompactTaskItem(task = task)
+                                    CompactTaskItem(task = task, isAdmin = uiState.isAdmin)
                                     Divider()
                                 }
                             }
@@ -302,7 +430,6 @@ fun TopTasksTab(topTasks: List<AggregatedTask>) {
                 }
             }
 
-            // --- Section 2: Completed Card ---
             item {
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column {
@@ -319,7 +446,7 @@ fun TopTasksTab(topTasks: List<AggregatedTask>) {
                         } else {
                             Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                                 completedTasks.forEach { task ->
-                                    CompactTaskItem(task = task)
+                                    CompactTaskItem(task = task, isAdmin = uiState.isAdmin)
                                     Divider()
                                 }
                             }
@@ -332,8 +459,8 @@ fun TopTasksTab(topTasks: List<AggregatedTask>) {
 }
 
 @Composable
-fun CompactTaskItem(task: AggregatedTask) {
-    // Calculate completion percentage
+fun CompactTaskItem(task: AggregatedTask, isAdmin: Boolean) {
+    var isExpanded by remember { mutableStateOf(false) }
     val totalAssignments = task.completedCount + task.pendingCount
     val completionPercentage = if (totalAssignments > 0) {
         (task.completedCount.toFloat() / totalAssignments.toFloat() * 100).roundToInt()
@@ -341,245 +468,40 @@ fun CompactTaskItem(task: AggregatedTask) {
         0
     }
 
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = task.title,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                text = "${task.points} pts",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        Spacer(Modifier.width(8.dp))
-        Text(
-            text = "$completionPercentage%",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = if (completionPercentage == 100) MaterialTheme.colorScheme.primary else LocalContentColor.current
-        )
-    }
-}
-
-
-
-@Composable
-fun TopTaskCard(task: AggregatedTask) {
-    var isExpanded by remember { mutableStateOf(false) }
-
-    val totalAssignments = task.completedCount + task.pendingCount
-
-    // Avoid division by zero if there are no assignments
-    val completionPercentage = if (totalAssignments > 0) {
-        (task.completedCount.toFloat() / totalAssignments.toFloat() * 100).roundToInt()
-    } else { 0 }
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        onClick = { isExpanded = !isExpanded }
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            // Top, always-visible part
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(task.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Text("${task.points} pts", style = MaterialTheme.typography.bodyMedium)
-                }
-                // --- NEW: Display the Percentage ---
-                Text("$completionPercentage%", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.width(8.dp))
-                Icon(
-                    imageVector = if (isExpanded) Icons.Default.ArrowDropDown else Icons.Default.ArrowDropDown,
-                    contentDescription = if (isExpanded) "Collapse" else "Expand"
-                )
-            }
-
-            // Expandable content
-            AnimatedVisibility(visible = isExpanded) {
-                Column(modifier = Modifier.padding(top = 16.dp)) {
-                    Divider()
-                    Spacer(Modifier.height(16.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.CheckCircle, "Completed", tint = MaterialTheme.colorScheme.primary)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Completed: ${task.completedCount}")
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.CheckCircle, "Pending", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Pending: ${task.pendingCount}")
-                    }
-
-                    if (task.completedAt != null) {
-                        // If a completion date exists, show it.
-                        Text(
-                            "100% Completed on: ${formatTimestamp(task.completedAt)}",
-                            style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    } else {
-                        // Otherwise, show the pending message.
-                        Text(
-                            "Pending 100% Completion",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-
-
-                    // --- NEW: Display the Timestamp ---
-                    task.createdAt?.let {
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            "Created: ${formatTimestamp(it)}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-private fun formatTimestamp(timestamp: Timestamp): String {
-    return SimpleDateFormat("MMM dd, yyyy 'at' hh:mm a", Locale.getDefault())
-        .format(timestamp.toDate())
-}
-
-
-@Composable
-fun InfoBox(label: String, value: String, isPrimary: Boolean = false) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Text(
-            text = value,
-            style = if (isPrimary) MaterialTheme.typography.headlineMedium else MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold
-        )
-    }
-}
-
-/**
- * A composable that displays a single member in the room list.
- */
-@Composable
-fun MemberListItem(
-    rank: Int,
-    member: RoomMember,
-    isFirstPlace: Boolean,
-    onLongPress: () -> Unit) {
-//Change the color of the card based on the rank
-    val cardColors = if (isFirstPlace) {
-        CardDefaults.cardColors(
-            // Use a distinct, theme-aware color for emphasis.
-            containerColor = colorResource(id = R.color.first_greenLight), // Changes Card / box color
-//            contentColor = colorResource(id = R.color.second_blueDark) // Changes name and rank color
-        )
-    } else {
-        // Use the default card colors for everyone else.
-        CardDefaults.cardColors()
-    }
-
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            // --- NEW: Gesture Detection ---
-            .pointerInput(Unit) {
-                detectTapGestures(
-                    onLongPress = { onLongPress() })
-            },
-        colors = cardColors
-
-    ) {
+    Column {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .clickable { isExpanded = !isExpanded }
+                .padding(vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Rank
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = task.title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "${task.points} pts",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Spacer(Modifier.width(8.dp))
             Text(
-                "#$rank",
+                text = "$completionPercentage%",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
-                modifier = Modifier.width(40.dp) // Give it a fixed width for alignment
-            )
-            // Name
-            Text(
-                member.name,
-                style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.weight(1f) // Name takes up the remaining space
-            )
-            // Points
-            Text(
-                "${member.totalPointsInGroup} pts",
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
+                color = if (completionPercentage == 100) MaterialTheme.colorScheme.primary else LocalContentColor.current
             )
         }
-    }
-}
-
-/**
- * A new, dedicated composable for the Edit Room dialog.
- */
-@Composable
-fun EditRoomDialog(
-    currentRoomName: String,
-    onDismiss: () -> Unit,
-    onSave: (String) -> Unit,
-    onDelete: () -> Unit
-) {
-    var roomName by remember { mutableStateOf(currentRoomName) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Edit Room") },
-        text = {
-            Column {
-                OutlinedTextField(
-                    value = roomName,
-                    onValueChange = { roomName = it },
-                    label = { Text("Room Name") },
-                    singleLine = true
-                )
-                Spacer(Modifier.height(16.dp))
-                // The delete button is placed inside the dialog
-                Button(
-                    onClick = onDelete,
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                ) {
-                    Text("Delete This Room")
+        AnimatedVisibility(visible = isExpanded && isAdmin) {
+            Column(modifier = Modifier.padding(start = 16.dp, top = 4.dp, bottom = 8.dp)) {
+                task.completions.forEach { completion ->
+                    Text("${completion.userName}: ${completion.status}", style = MaterialTheme.typography.bodySmall)
                 }
             }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { onSave(roomName) },
-                enabled = roomName.isNotBlank() && roomName != currentRoomName
-            ) {
-                Text("Save")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
         }
-    )
+    }
 }
