@@ -188,33 +188,33 @@ fun TaskHistoryList(
 ) {
     var taskToAction by remember { mutableStateOf<Task?>(null) }
 
-    // Confirmation Dialog for Edit/Delete
-    if (taskToAction != null) {
-        AlertDialog(
-            onDismissRequest = { taskToAction = null },
-            title = { Text("Task Options") },
-            text = { Text("What would you like to do with '${taskToAction!!.title}'?") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        onNavigateToEdit(taskToAction!!.id)
-                        taskToAction = null
-                    }
-                ) { Text("Edit") }
-            },
-            dismissButton = {
-                Row {
-                    TextButton(
-                        onClick = {
-                            viewModel.deleteTask(taskToAction!!.id)
-                            taskToAction = null
-                        }
-                    ) { Text("Delete", color = MaterialTheme.colorScheme.error) }
-                    TextButton(onClick = { taskToAction = null }) { Text("Cancel") }
-                }
-            }
-        )
-    }
+    // No longer needed for "History"
+//    if (taskToAction != null) {
+//        AlertDialog(
+//            onDismissRequest = { taskToAction = null },
+//            title = { Text("Task Options") },
+//            text = { Text("What would you like to do with '${taskToAction!!.title}'?") },
+//            confirmButton = {
+//                TextButton(
+//                    onClick = {
+//                        onNavigateToEdit(taskToAction!!.id)
+//                        taskToAction = null
+//                    }
+//                ) { Text("Edit") }
+//            },
+//            dismissButton = {
+//                Row {
+//                    TextButton(
+//                        onClick = {
+//                            viewModel.deleteTask(taskToAction!!.id)
+//                            taskToAction = null
+//                        }
+//                    ) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+//                    TextButton(onClick = { taskToAction = null }) { Text("Cancel") }
+//                }
+//            }
+//        )
+//    }
 
     Scaffold(
     ) { paddingValues ->

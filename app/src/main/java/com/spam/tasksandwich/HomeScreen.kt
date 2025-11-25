@@ -1,7 +1,9 @@
 package com.spam.tasksandwich
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -32,65 +34,105 @@ fun HomeScreen(
 ) {
     val uiState by homeViewModel.uiState.collectAsState()
     val lifecycleOwner = LocalLifecycleOwner.current
+    var roomToAction by remember { mutableStateOf<UserRoom?>(null) }
+
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    // Dialog for Leave/Delete Confirmation
+    if (roomToAction != null) {
+        val room = roomToAction!!
+        val title = if (room.isAdmin) "Delete Room" else "Leave Room"
+        val text = if (room.isAdmin) {
+            "You are the admin of this room. Deleting it will permanently remove it for all members. Are you sure?"
+        } else {
+            "Are you sure you want to leave the room '${room.groupName}'?"
+        }
+        val confirmText = if (room.isAdmin) "Delete" else "Leave"
+
+        AlertDialog(
+            onDismissRequest = { roomToAction = null },
+            title = { Text(title) },
+            text = { Text(text) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        homeViewModel.leaveOrDeleteRoom(room)
+                        roomToAction = null
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) { Text(confirmText) }
+            },
+            dismissButton = {
+                TextButton(onClick = { roomToAction = null }) { Text("Cancel") }
+            }
+        )
+    }
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            // When the screen RESUMES (i.e., you navigate back to it)
             if (event == Lifecycle.Event.ON_RESUME) {
-                // Call the refresh function on the ViewModel.
                 homeViewModel.onResume()
             }
         }
-
         lifecycleOwner.lifecycle.addObserver(observer)
-
-        // When the composable is disposed, remove the observer.
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
         }
     }
 
+    LaunchedEffect(uiState.error) {
+        uiState.error?.let {
+            snackbarHostState.showSnackbar(
+                message = it,
+                duration = SnackbarDuration.Long
+            )
+        }
+    }
 
-    // This side effect handles the navigation event after a user creates a new room.
     LaunchedEffect(uiState.createdRoomId) {
         uiState.createdRoomId?.let { roomId ->
             navController.navigate(Screen.RoomDetail.createRoute(roomId))
-            homeViewModel.onRoomCreationHandled() // Reset the event to prevent re-navigation
+            homeViewModel.onRoomCreationHandled()
         }
     }
 
-    Surface(modifier = Modifier.fillMaxSize()) {
-        if (uiState.isLoading) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) }
+    ) { paddingValues ->
+        Surface(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
+            when {
+                uiState.isLoading -> {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
+                }
+                uiState.rooms.isEmpty() -> {
+                    EmptyStateProfile(
+                        userProfile = uiState.userProfile,
+                        onAddTaskClick = { navController.navigate(Screen.AddSelfTask.route) },
+                        onJoinRoomClick = { navController.navigate(Screen.JoinRoom.route) },
+                        onCreateRoomClick = { homeViewModel.createRoom("My New Room") }
+                    )
+                }
+                else -> {
+                    HomeDashboard(
+                        uiState = uiState,
+                        onCompleteTask = { task -> homeViewModel.markTaskComplete(task) },
+                        onRoomClick = { roomId -> navController.navigate(Screen.RoomDetail.createRoute(roomId)) },
+                        onRoomLongPress = { room -> roomToAction = room }
+                    )
+                }
             }
-        }
-        // If the user has not joined or created any rooms, show the initial welcome screen.
-        else if (uiState.rooms.isEmpty()) {
-            EmptyStateProfile(
-                userProfile = uiState.userProfile,
-                onAddTaskClick = { navController.navigate(Screen.AddSelfTask.route) },
-                onJoinRoomClick = { navController.navigate(Screen.JoinRoom.route) },
-                onCreateRoomClick = { homeViewModel.createRoom("My New Room")}
-                // The create room action is now handled by the drawer
-
-            )
-        }
-        // If the user is part of one or more rooms, show the main dashboard view.
-        else {
-            HomeDashboard(
-                uiState = uiState,
-                onCompleteTask = { task -> homeViewModel.markTaskComplete(task) },
-                onRoomClick = { roomId -> navController.navigate(Screen.RoomDetail.createRoute(roomId)) }
-            )
         }
     }
 }
+
 @Composable
 fun HomeDashboard(
     uiState: HomeUiState,
     onCompleteTask: (Task) -> Unit,
-    onRoomClick: (String) -> Unit
+    onRoomClick: (String) -> Unit,
+    onRoomLongPress: (UserRoom) -> Unit
 ) {
     val totalTasks = uiState.groupedTasks.values.sumOf { it.size }
     Column(
@@ -98,16 +140,18 @@ fun HomeDashboard(
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        // --- ROOMS SECTION ---
         Text("My Rooms (${uiState.rooms.size})", style = MaterialTheme.typography.headlineSmall)
         Spacer(modifier = Modifier.height(8.dp))
-        // This LazyColumn will only grow up to 200.dp in height.
         LazyColumn(
             modifier = Modifier.heightIn(max = 200.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             items(uiState.rooms) { room ->
-                RoomCard(room = room, onClick = { onRoomClick(room.groupId) })
+                RoomCard(
+                    room = room,
+                    onClick = { onRoomClick(room.groupId) },
+                    onLongPress = { onRoomLongPress(room) }
+                )
             }
         }
 
@@ -115,7 +159,6 @@ fun HomeDashboard(
         HorizontalDivider(Modifier, DividerDefaults.Thickness, DividerDefaults.color)
         Spacer(modifier = Modifier.height(24.dp))
 
-        // --- TASKS SECTION ---
         Text("My Tasks ($totalTasks)", style = MaterialTheme.typography.headlineSmall)
         Spacer(modifier = Modifier.height(8.dp))
         if (uiState.groupedTasks.isEmpty()) {
@@ -126,16 +169,16 @@ fun HomeDashboard(
                 contentAlignment = Alignment.Center
             ) {
                 Text("You have no pending tasks! \n Add task from the top left", style = MaterialTheme.typography.bodyLarge)
-
             }
         } else {
-            // This reuses the TaskList composable we built in a previous step.
             TaskList(groupedTasks = uiState.groupedTasks, onCompleteTask = onCompleteTask)
         }
     }
 }
+
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun RoomCard(room: UserRoom, onClick: () -> Unit) {
+fun RoomCard(room: UserRoom, onClick: () -> Unit, onLongPress: () -> Unit) {
     val cardColors = if (room.isAdmin) {
         CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
     } else {
@@ -144,7 +187,10 @@ fun RoomCard(room: UserRoom, onClick: () -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongPress
+            ),
         colors = cardColors,
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
@@ -156,10 +202,8 @@ fun RoomCard(room: UserRoom, onClick: () -> Unit) {
                 text = room.groupName,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
-                modifier = Modifier.weight(1f) // Takes up available space
+                modifier = Modifier.weight(1f)
             )
-
-            // Points on the right
             Text(
                 text = "${room.userPointsInRoom} pts",
                 style = MaterialTheme.typography.bodyLarge,
@@ -185,7 +229,6 @@ fun EmptyStateProfile(
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // User Welcome and Profile Info
         Text("Welcome, ${userProfile?.name ?: "User"}!", style = MaterialTheme.typography.headlineLarge)
         Spacer(modifier = Modifier.height(8.dp))
         Text(
@@ -193,16 +236,12 @@ fun EmptyStateProfile(
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.primary
         )
-
         Spacer(modifier = Modifier.height(48.dp))
-
-        // Action Buttons Section
         Text(
             "No task for today? Let's add one from settings!",
             style = MaterialTheme.typography.titleMedium
         )
         Spacer(modifier = Modifier.height(24.dp))
-
     }
 }
 
@@ -244,12 +283,11 @@ fun AssignerTaskGroup(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = assignerName, // AssignerName is Room name aka "Room 2"
+                    text = assignerName,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.weight(1f)
                 )
-
                 Icon(
                     imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
                     contentDescription = if (isExpanded) "Collapse" else "Expand"
@@ -286,7 +324,6 @@ fun TaskItem(task: Task, onCompleteClick: () -> Unit) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.primary
             )
-            // Add the new CountdownTimer composable here
             CountdownTimer(dueDate = task.dueDate)
         }
         Button(onClick = onCompleteClick) {
@@ -295,52 +332,30 @@ fun TaskItem(task: Task, onCompleteClick: () -> Unit) {
     }
 }
 
-// --- NEW: Countdown Timer Composable ---
-/**
- * A self-updating composable that displays the time remaining until a due date.
- * It recomposes itself every minute to show a live countdown.
- */
 @Composable
 fun CountdownTimer(dueDate: Timestamp?) {
-    // If there's no due date, compose nothing.
     if (dueDate == null) return
-
-    // This state holds the *current* time, and we'll update it on a timer.
     var now by remember { mutableStateOf(System.currentTimeMillis()) }
-
-    // This is the core of the timer. LaunchedEffect runs a coroutine that
-    // can be suspended without blocking the UI.
     LaunchedEffect(Unit) {
         while (true) {
-            // Wait for one minute. (delay is a suspend function)
-            delay(60_000L) // 60,000 milliseconds = 1 minute
-            // Update the 'now' state, which will trigger a recomposition of this composable.
+            delay(60_000L)
             now = System.currentTimeMillis()
         }
     }
-
-    // Calculate the formatted duration string based on the current time.
     val timeLeftString = formatDuration(now, dueDate.toDate().time)
-
     Text(
         text = timeLeftString,
         style = MaterialTheme.typography.bodySmall,
         fontWeight = FontWeight.Bold,
-        // Use a different color to indicate status
         color = if (timeLeftString == "Expired") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
     )
 }
 
-// --- NEW: Helper Function for Formatting ---
-/**
- * Formats a duration in milliseconds into a human-readable string like "2d 5h left".
- */
 private fun formatDuration(now: Long, future: Long): String {
     val diff = future - now
     if (diff <= 0) {
         return "Expired"
     }
-
     val days = TimeUnit.MILLISECONDS.toDays(diff)
     val hours = TimeUnit.MILLISECONDS.toHours(diff) % 24
     val minutes = TimeUnit.MILLISECONDS.toMinutes(diff) % 60
@@ -352,3 +367,9 @@ private fun formatDuration(now: Long, future: Long): String {
         else -> "< 1m left"
     }
 }
+
+
+//fake3@gmail.com
+//Password123!!!
+
+// C:\Users\kylan\AndroidStudioProjects\TaskSandwich

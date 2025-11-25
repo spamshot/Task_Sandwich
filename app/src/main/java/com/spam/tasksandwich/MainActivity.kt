@@ -1,6 +1,7 @@
 package com.spam.tasksandwich
 
 import android.os.Bundle
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -17,11 +18,20 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
+import com.google.firebase.appcheck.FirebaseAppCheck
 import com.spam.tasksandwich.ui.theme.TaskSandwichTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        FirebaseAppCheck.getInstance().getAppCheckToken(false)
+            .addOnSuccessListener { tokenResponse ->
+                Log.e("TaskSandwich", "FORCE TOKEN: ${tokenResponse.token}")
+            }
+            .addOnFailureListener { e ->
+                Log.e("TaskSandwich", "FORCE TOKEN FAILED: ${e.message}")
+            }
         setContent {
             TaskSandwichTheme {
                 Surface(

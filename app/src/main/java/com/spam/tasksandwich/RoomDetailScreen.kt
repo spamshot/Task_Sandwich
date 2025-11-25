@@ -52,6 +52,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Divider
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
@@ -73,7 +74,6 @@ import kotlin.math.roundToInt
 fun RoomDetailScreen(
     roomId: String,
     onNavigateBack: () -> Unit,
-//    onEditRoomClick: () -> Unit,
     onCreateShopClick: () -> Unit,
     onViewShopClick: () -> Unit,
     onNavigateToManageTasks: () -> Unit,
@@ -81,23 +81,20 @@ fun RoomDetailScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var memberToKick by remember { mutableStateOf<RoomMember?>(null) }
-    var showEditRoomDialog by remember { mutableStateOf(false) }
-
-
     var selectedTabIndex by remember { mutableStateOf(0) }
-    val tabs = listOf("Leaderboard", "Top Task") // Placeholder for the second tab
+    val tabs = listOf("Leaderboard", "Top Task")
 
-    // --- NEW: Confirmation Dialog ---
+    // --- Kick Confirmation Dialog ---
     if (memberToKick != null) {
         AlertDialog(
-            onDismissRequest = { memberToKick = null }, // Dismiss if user clicks outside
+            onDismissRequest = { memberToKick = null },
             title = { Text("Kick Member") },
             text = { Text("Are you sure you want to kick ${memberToKick!!.name} from the room?") },
             confirmButton = {
                 TextButton(
                     onClick = {
                         viewModel.kickMember(memberToKick!!.userId)
-                        memberToKick = null // Close the dialog
+                        memberToKick = null
                     }
                 ) {
                     Text("Yes, Kick")
@@ -111,35 +108,15 @@ fun RoomDetailScreen(
         )
     }
 
-    // This effect will navigate back when the ViewModel signals the room is deleted.
+    // This effect will navigate back when the ViewModel signals the room is deleted
+    // (In case you add delete functionality back later, keeping this doesn't hurt)
     LaunchedEffect(uiState.isRoomDeleted) {
         if (uiState.isRoomDeleted) {
             onNavigateBack()
         }
     }
 
-    // --- NEW: The Edit Room Dialog ---
-    if (showEditRoomDialog) {
-        EditRoomDialog(
-            currentRoomName = uiState.roomName,
-            onDismiss = { showEditRoomDialog = false },
-            onSave = { newName ->
-                viewModel.updateRoomName(newName)
-                showEditRoomDialog = false
-            },
-            onDelete = {
-                viewModel.deleteRoom()
-                showEditRoomDialog = false
-            }
-        )
-    }
-
-
-
-    Scaffold(
-
-    ) { paddingValues ->
-        // Handle the loading state first
+    Scaffold { paddingValues ->
         if (uiState.isLoading) {
             Box(
                 modifier = Modifier
@@ -150,7 +127,6 @@ fun RoomDetailScreen(
                 CircularProgressIndicator()
             }
         } else {
-            // Main content column
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -158,17 +134,17 @@ fun RoomDetailScreen(
                     .padding(horizontal = 16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-
+                // Top "bar" with room details
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceAround,
                     verticalAlignment = Alignment.CenterVertically
-                    //Top "bar" with room details
                 ) {
                     InfoBox(label = "Members", value = uiState.memberCount.toString())
                     InfoBox(label = "Room Code", value = uiState.joinCode, isPrimary = true)
                     InfoBox(label = "Earnable Pts", value = uiState.totalEarnablePoints.toString())
                 }
+
                 TabRow(selectedTabIndex = selectedTabIndex) {
                     tabs.forEachIndexed { index, title ->
                         Tab(
@@ -178,7 +154,7 @@ fun RoomDetailScreen(
                         )
                     }
                 }
-                // Display the content for the selected tab
+
                 when (selectedTabIndex) {
                     0 -> LeaderboardTabContent(
                         uiState = uiState,
@@ -193,71 +169,6 @@ fun RoomDetailScreen(
             }
         }
     }
-}
-
-@Composable
-fun EditRoomDialog(
-    currentRoomName: String,
-    onDismiss: () -> Unit,
-    onSave: (String) -> Unit,
-    onDelete: () -> Unit
-) {
-    var newName by remember { mutableStateOf(currentRoomName) }
-    var showDeleteConfirm by remember { mutableStateOf(false) }
-
-    if (showDeleteConfirm) {
-        AlertDialog(
-            onDismissRequest = { showDeleteConfirm = false },
-            title = { Text("Delete Room") },
-            text = { Text("Are you sure you want to permanently delete this room? This action cannot be undone.") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        onDelete()
-                        showDeleteConfirm = false
-                    },
-                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                ) { Text("DELETE") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeleteConfirm = false }) { Text("Cancel") }
-            }
-        )
-    }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Edit Room") },
-        text = {
-            Column {
-                OutlinedTextField(
-                    value = newName,
-                    onValueChange = { newName = it },
-                    label = { Text("Room Name") }
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { onSave(newName) },
-                enabled = newName.isNotBlank() && newName != currentRoomName
-            ) {
-                Text("Save")
-            }
-        },
-        dismissButton = {
-            Row {
-                TextButton(
-                    onClick = { showDeleteConfirm = true },
-                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                ) {
-                    Text("Delete Room")
-                }
-                Spacer(modifier = Modifier.weight(1f))
-                TextButton(onClick = onDismiss) { Text("Cancel") }
-            }
-        }
-    )
 }
 
 @Composable
@@ -280,15 +191,19 @@ fun InfoBox(label: String, value: String, isPrimary: Boolean = false) {
 }
 
 @Composable
-fun MemberListItem(rank: Int, member: RoomMember, isFirstPlace: Boolean, onLongPress: () -> Unit) {
-    // Change the color of the card based on the rank
-    val cardColors = if (isFirstPlace) {
-        CardDefaults.cardColors(
-            // Use a distinct, theme-aware color for emphasis.
-            containerColor = colorResource(id = R.color.first_greenLight))
-    } else {
-        CardDefaults.cardColors()
+fun MemberListItem(
+    rank: Int,
+    member: RoomMember,
+    isFirstPlace: Boolean,
+    isCurrentUser: Boolean,
+    onLongPress: () -> Unit
+) {
+    val cardColors = when {
+        isFirstPlace -> CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+        isCurrentUser -> CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+        else -> CardDefaults.cardColors()
     }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -360,7 +275,13 @@ fun LeaderboardTabContent(
                         rank = index + 1,
                         member = member,
                         isFirstPlace = (index == 0),
-                        onLongPress = { onMemberLongPress(member) }
+                        isCurrentUser = member.userId == uiState.currentUserId,
+                        onLongPress = {
+                            // Only allow Admin to kick others (and not themselves)
+                            if (uiState.isAdmin && member.userId != uiState.currentUserId) {
+                                onMemberLongPress(member)
+                            }
+                        }
                     )
                 }
             }
@@ -413,7 +334,7 @@ fun TopTasksTab(uiState: RoomDetailUiState) {
                             style = MaterialTheme.typography.titleMedium,
                             modifier = Modifier.padding(12.dp)
                         )
-                        Divider()
+                        HorizontalDivider()
                         if (pendingTasks.isEmpty()) {
                             Box(Modifier.padding(12.dp).fillMaxWidth(), contentAlignment = Alignment.Center) {
                                 Text("None")
@@ -422,7 +343,7 @@ fun TopTasksTab(uiState: RoomDetailUiState) {
                             Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                                 pendingTasks.forEach { task ->
                                     CompactTaskItem(task = task, isAdmin = uiState.isAdmin)
-                                    Divider()
+                                    HorizontalDivider()
                                 }
                             }
                         }
@@ -438,7 +359,7 @@ fun TopTasksTab(uiState: RoomDetailUiState) {
                             style = MaterialTheme.typography.titleMedium,
                             modifier = Modifier.padding(12.dp)
                         )
-                        Divider()
+                        HorizontalDivider()
                         if (completedTasks.isEmpty()) {
                             Box(Modifier.padding(12.dp).fillMaxWidth(), contentAlignment = Alignment.Center) {
                                 Text("None")
@@ -447,7 +368,7 @@ fun TopTasksTab(uiState: RoomDetailUiState) {
                             Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                                 completedTasks.forEach { task ->
                                     CompactTaskItem(task = task, isAdmin = uiState.isAdmin)
-                                    Divider()
+                                    HorizontalDivider()
                                 }
                             }
                         }
@@ -505,3 +426,5 @@ fun CompactTaskItem(task: AggregatedTask, isAdmin: Boolean) {
         }
     }
 }
+
+//Todo we no longer need delete room in this part, we don't have Edit room here any more

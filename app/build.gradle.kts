@@ -3,6 +3,7 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.google.gms.google.services)
+
 }
 
 android {
@@ -56,6 +57,8 @@ dependencies {
     implementation(libs.androidx.credentials.play.services.auth)
     implementation(libs.googleid)
     implementation(libs.androidx.compose.ui.text)
+    implementation(libs.firebase.appcheck.debug)
+//    implementation(libs.firebase.functions.ktx)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
@@ -65,13 +68,19 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 
     // ViewModel for state management
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.9.4")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0")
 
     // Navigation for moving between screens
-    implementation("androidx.navigation:navigation-compose:2.9.5")
+    implementation("androidx.navigation:navigation-compose:2.9.6")
 
     // Firebase Bill of Materials (BoM) - This handles versions for other Firebase libs
-    implementation(platform("com.google.firebase:firebase-bom:34.4.0"))
+    implementation(platform("com.google.firebase:firebase-bom:34.6.0"))
+
+    implementation("com.google.firebase:firebase-functions:22.1.0")
+    implementation("com.google.firebase:firebase-appcheck-playintegrity")
+    implementation("com.google.firebase:firebase-analytics")
+
+//https://firebase.google.com/support/release-notes/android#bom_v32-5-0
 
     // Firebase Authentication
 //    implementation("com.google.firebase:firebase-auth")

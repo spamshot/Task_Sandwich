@@ -1,5 +1,6 @@
 package com.spam.tasksandwich
 
+import android.util.Log
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -15,6 +16,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import com.google.firebase.firestore.Query
+import com.google.firebase.functions.functions
 
 
 // Data class to represent a member in the UI
@@ -52,12 +54,16 @@ data class RoomDetailUiState(
     val error: String? = null,
     val isRoomDeleted: Boolean = false,
     val topTasks: List<AggregatedTask> = emptyList(),
+    val currentUserId: String = ""
 )
 
 class RoomDetailViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
     private val db = Firebase.firestore
     private val auth = Firebase.auth
     val roomId: String = savedStateHandle.get("roomId")!!
+
+
+    private val functions = Firebase.functions("us-central1")
 
     private val _uiState = MutableStateFlow(RoomDetailUiState())
     val uiState = _uiState.asStateFlow()
@@ -66,6 +72,7 @@ class RoomDetailViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
         if (roomId.isBlank()) {
             _uiState.update { it.copy(isLoading = false, error = "Room ID is missing.") }
         } else {
+            _uiState.update { it.copy(currentUserId = auth.currentUser?.uid ?: "") }
             fetchCurrentUserRole()
             fetchRoomDetails()
             listenForMembers()
@@ -143,11 +150,13 @@ class RoomDetailViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
                     viewModelScope.launch {
                         val memberJobs = querySnapshot.documents.map { memberDoc ->
                             async {
-                                val userDoc = db.collection("users").document(memberDoc.id).get().await()
+                                val userDoc =
+                                    db.collection("users").document(memberDoc.id).get().await()
                                 RoomMember(
                                     userId = memberDoc.id,
                                     name = userDoc.getString("name") ?: "Unknown User",
-                                    totalPointsInGroup = memberDoc.getLong("totalPointsInGroup")?.toInt() ?: 0
+                                    totalPointsInGroup = memberDoc.getLong("totalPointsInGroup")
+                                        ?.toInt() ?: 0
                                 )
                             }
                         }
@@ -202,11 +211,13 @@ class RoomDetailViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
                             async {
                                 val firstDoc = docs.first()
                                 val completed = docs.count { it.getString("status") != "assigned" }
-                                val pendingCount = docs.count { it.getString("status") == "assigned" }
+                                val pendingCount =
+                                    docs.count { it.getString("status") == "assigned" }
 
                                 var completionTimestamp: Timestamp? = null
                                 if (pendingCount == 0 && docs.isNotEmpty()) {
-                                    completionTimestamp = docs.mapNotNull { it.getTimestamp("handledAt") }.maxOrNull()
+                                    completionTimestamp =
+                                        docs.mapNotNull { it.getTimestamp("handledAt") }.maxOrNull()
                                 }
 
                                 // --- Admin View: Fetch completion details ---
@@ -214,14 +225,16 @@ class RoomDetailViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
                                     async {
                                         val userId = doc.getString("assignedToUserId") ?: ""
                                         val status = doc.getString("status") ?: "Unknown"
-                                        val userDoc = db.collection("users").document(userId).get().await()
+                                        val userDoc =
+                                            db.collection("users").document(userId).get().await()
                                         val userName = userDoc.getString("name") ?: "Unknown User"
                                         TaskCompletionDetails(userName, status)
                                     }
                                 }
 
                                 AggregatedTask(
-                                    sharedTaskId = firstDoc.getString("sharedTaskId") ?: firstDoc.id,
+                                    sharedTaskId = firstDoc.getString("sharedTaskId")
+                                        ?: firstDoc.id,
                                     title = firstDoc.getString("title") ?: "Unknown Task",
                                     points = firstDoc.getLong("points")?.toInt() ?: 0,
                                     completedCount = completed,
@@ -232,7 +245,8 @@ class RoomDetailViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
                                 )
                             }
                         }
-                        val aggregatedList = aggregatedListJobs.awaitAll().sortedByDescending { it.pendingCount }
+                        val aggregatedList =
+                            aggregatedListJobs.awaitAll().sortedByDescending { it.pendingCount }
                         _uiState.update { it.copy(topTasks = aggregatedList) }
                     }
                 }
@@ -242,45 +256,43 @@ class RoomDetailViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
 
     fun kickMember(userIdToKick: String) {
         val currentUser = auth.currentUser ?: return
+
         viewModelScope.launch {
             try {
-                // Client-side guard to check for admin status
-                val groupDocSnapshot = db.collection("groups").document(roomId).get().await()
-                val adminId = groupDocSnapshot.getString("adminUserId")
-                if (currentUser.uid != adminId) {
-                    _uiState.update { it.copy(error = "You do not have permission to kick members.") }
-                    return@launch
-                }
-                if (userIdToKick == currentUser.uid) {
-                    _uiState.update { it.copy(error = "You cannot kick yourself from the room.") }
-                    return@launch
-                }
+                // 1. GET TOKEN (Copying the logic from leaveOrDeleteRoom)
+                // We must force-fetch the token to bypass the "Zombie Auth" issue
+                val tokenResult = currentUser.getIdToken(true).await()
+                val rawToken = tokenResult.token
 
-                // Use a Transaction to ensure all operations succeed or fail together
-                db.runTransaction { transaction ->
-                    val memberRef = db.collection("groups").document(roomId)
-                        .collection("groupMembers").document(userIdToKick)
-                    val userRef = db.collection("users").document(userIdToKick)
-//                    val groupRef = db.collection("groups").document(roomId)
+                // 2. PREPARE DATA
+                // We include 'debugToken' manually so the Cloud Function can verify us
+                val data = hashMapOf(
+                    "groupId" to roomId,
+                    "userIdToKick" to userIdToKick,
+                    "debugToken" to rawToken
+                )
 
-                    // Read the user's document to get their current list of rooms
-                    val userDoc = transaction.get(userRef)
-                    @Suppress("UNCHECKED_CAST")
-                    val groupsJoined = userDoc.get("groupsJoined") as? List<HashMap<String, Any>> ?: emptyList()
+//                Log.d("KickMember", "Attempting to kick user: $userIdToKick")
 
-                    // Modify the list by filtering out the room they are being kicked from
-                    val newGroupsJoined = groupsJoined.filter { it["groupId"] != roomId }
+                // 3. CALL FUNCTION
+                functions.getHttpsCallable("kickMember")
+                    .call(data)
+                    .await()
 
-                    // Write the new, filtered list back to the user's document
-                    transaction.update(userRef, "groupsJoined", newGroupsJoined)
-                    // Remove the user's ID from the group's 'memberIds' array for security rules
-//                    transaction.update(groupRef, "memberIds", FieldValue.arrayRemove(userIdToKick))
-                    // Delete the user from the room's member list
-                    transaction.delete(memberRef)
-                }.await()
+                Log.d("KickMember", "Success!")
+                // The real-time listeners will automatically update the UI
 
             } catch (e: Exception) {
-                _uiState.update { it.copy(error = "Failed to kick member: ${e.message}") }
+                Log.e("KickMember", "Failed: ${e.message}")
+
+                // Detailed Error Logging (Just like in HomeViewModel)
+                if (e is com.google.firebase.functions.FirebaseFunctionsException) {
+                    Log.e("KickMember", "Code: ${e.code}")
+                    Log.e("KickMember", "Details: ${e.details}")
+                    _uiState.update { it.copy(error = "Server Error: ${e.message}") }
+                } else {
+                    _uiState.update { it.copy(error = "Failed to kick member: ${e.message}") }
+                }
             }
         }
     }
