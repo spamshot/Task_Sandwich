@@ -68,16 +68,25 @@ fun AppShell(
 
     if (showCreateRoomDialog) {
         var roomName by remember { mutableStateOf("") }
+        // --- OPTIONAL: Double Check Error here in case dialog opens anyway ---
+        val errorText = if (!uiState.canCreateRoom) "Limit reached (Max 4 rooms)" else null
+
         AlertDialog(
             onDismissRequest = { showCreateRoomDialog = false },
             title = { Text("Create a New Room") },
             text = {
-                OutlinedTextField(
-                    value = roomName,
-                    onValueChange = { roomName = it },
-                    label = { Text("Room Name") },
-                    singleLine = true
-                )
+                Column {
+                    OutlinedTextField(
+                        value = roomName,
+                        onValueChange = { roomName = it },
+                        label = { Text("Room Name") },
+                        singleLine = true,
+                        isError = errorText != null
+                    )
+                    if (errorText != null) {
+                        Text(text = errorText, color = MaterialTheme.colorScheme.error)
+                    }
+                }
             },
             confirmButton = {
                 TextButton(
@@ -85,7 +94,8 @@ fun AppShell(
                         appShellViewModel.createRoom(roomName)
                         showCreateRoomDialog = false
                     },
-                    enabled = roomName.isNotBlank()
+                    // Disable confirm button if limit reached
+                    enabled = roomName.isNotBlank() && uiState.canCreateRoom
                 ) { Text("Create") }
             },
             dismissButton = {
@@ -122,8 +132,8 @@ fun AppShell(
                 ) { Text("Join") }
             },
             dismissButton = {
-                TextButton(onClick = { 
-                    showJoinRoomDialog = false 
+                TextButton(onClick = {
+                    showJoinRoomDialog = false
                     appShellViewModel.clearError()
                 }) { Text("Cancel") }
             }
@@ -148,7 +158,6 @@ fun AppShell(
         Screen.CreateShopItem.route -> "Manage Shop Items"
         Screen.ViewShop.route -> "Room Shop"
         Screen.EditTask.route -> "Edit Task"
-//        Screen.EditRoomScreen.route -> "Edit Room"
         else -> "Chores App"
     }
 
@@ -164,6 +173,15 @@ fun AppShell(
         drawerContent = {
             ModalDrawerSheet {
                 drawerItems.forEach { item ->
+
+                    // --- SPAM LOGIC ---
+                    // If this is the "Create Room" button AND the user cannot create more rooms,
+                    // skip rendering this item completely.
+                    if (item.route == Screen.CreateRoom.route && !uiState.canCreateRoom) {
+                        return@forEach
+                    }
+                    // ------------------
+
                     NavigationDrawerItem(
                         icon = { Icon(item.icon, contentDescription = null) },
                         label = { Text(item.label) },

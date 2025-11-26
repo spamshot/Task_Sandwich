@@ -141,10 +141,62 @@ class HomeViewModel : ViewModel(), RefreshesViewModel {
 
     fun createRoom(roomName: String) {
         val currentUser = auth.currentUser ?: return
+
+        // 1. Block UI immediately
         _uiState.update { it.copy(isLoading = true) }
 
         viewModelScope.launch {
             try {
+                // =================================================================
+                // SPAM PROTECTION: The "Profile-First" Strategy
+                // =================================================================
+                // 1. Fetch the user's profile to see what rooms they have joined.
+                // This is safer than querying the 'groups' collection directly,
+                // which might be blocked by security rules.
+                val userDoc = db.collection("users").document(currentUser.uid)
+                    .get(com.google.firebase.firestore.Source.SERVER)
+                    .await()
+
+                @Suppress("UNCHECKED_CAST")
+                val groupsJoined = userDoc.get("groupsJoined") as? List<HashMap<String, String>> ?: emptyList()
+
+                // Optimization: If you haven't joined 4 rooms, you definitely don't OWN 4 rooms.
+                if (groupsJoined.size >= 4) {
+
+                    // 2. We need to check if you are the ADMIN of these rooms.
+                    var ownedCount = 0
+
+                    // Check the rooms one by one (or in parallel)
+                    val checkJobs = groupsJoined.map { map ->
+                        async {
+                            val groupId = map["groupId"] ?: ""
+                            if (groupId.isNotEmpty()) {
+                                val groupDoc = db.collection("groups").document(groupId).get().await()
+                                if (groupDoc.exists() && groupDoc.getString("adminUserId") == currentUser.uid) {
+                                    return@async 1
+                                }
+                            }
+                            return@async 0
+                        }
+                    }
+
+                    ownedCount = checkJobs.awaitAll().sum()
+
+                    Log.d("RoomLimit", "User has joined ${groupsJoined.size} rooms and owns $ownedCount.")
+
+                    if (ownedCount >= 4) {
+                        _uiState.update {
+                            it.copy(
+                                isLoading = false,
+                                error = "Limit reached: You can only create up to 4 rooms."
+                            )
+                        }
+                        return@launch
+                    }
+                }
+                // =================================================================
+
+                // ... Proceed to Create Room ...
                 val newRoomRef = db.collection("groups").document()
                 val joinCode = (100000..999999).random().toString()
 
@@ -174,11 +226,13 @@ class HomeViewModel : ViewModel(), RefreshesViewModel {
                 }.await()
 
                 _uiState.update { it.copy(isLoading = false, createdRoomId = newRoomRef.id) }
+
             } catch (e: Exception) {
                 _uiState.update { it.copy(isLoading = false, error = "Failed to create room: ${e.message}") }
             }
         }
     }
+
 
     fun onRoomCreationHandled() {
         _uiState.update { it.copy(createdRoomId = null) }
