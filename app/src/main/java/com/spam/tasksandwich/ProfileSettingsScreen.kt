@@ -78,10 +78,14 @@ fun ProfileSettingsForm(uiState: ProfileSettingsUiState, viewModel: ProfileSetti
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
+    // Form State
     var name by remember { mutableStateOf("") }
     var age by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var selectedIconId by remember { mutableStateOf("") }
+
+    // --- NEW: Logout Dialog State ---
+    var showLogoutDialog by remember { mutableStateOf(false) }
 
     // This effect populates the form fields once the user's profile is loaded.
     LaunchedEffect(uiState.userProfile) {
@@ -101,6 +105,31 @@ fun ProfileSettingsForm(uiState: ProfileSettingsUiState, viewModel: ProfileSetti
             }
             viewModel.onSaveHandled()
         }
+    }
+
+    // --- NEW: Confirmation Dialog ---
+    if (showLogoutDialog) {
+        AlertDialog(
+            onDismissRequest = { showLogoutDialog = false },
+            title = { Text("Logout") },
+            text = { Text("Are you sure you want to log out?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.logout()
+                        showLogoutDialog = false
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Yes, Logout")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLogoutDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 
     Scaffold(snackbarHost = { SnackbarHost(hostState = snackbarHostState) }) { paddingValues ->
@@ -134,11 +163,6 @@ fun ProfileSettingsForm(uiState: ProfileSettingsUiState, viewModel: ProfileSetti
 
                 Spacer(Modifier.weight(1f)) // Pushes buttons to the bottom
 
-
-                //Not the right spot always shows error
-//                if (uiState.error != null) {
-//                    Text(uiState.error, color = MaterialTheme.colorScheme.error)
-//                }
                 Spacer(Modifier.height(8.dp))
 
                 Button(
@@ -149,7 +173,11 @@ fun ProfileSettingsForm(uiState: ProfileSettingsUiState, viewModel: ProfileSetti
                     if (uiState.isSaving) CircularProgressIndicator(Modifier.size(24.dp)) else Text("Save Changes")
                 }
                 Spacer(Modifier.height(8.dp))
-                TextButton(onClick = { viewModel.logout() }) {
+
+                // --- UPDATED BUTTON ---
+                TextButton(
+                    onClick = { showLogoutDialog = true } // Triggers the dialog
+                ) {
                     Text("Logout", color = MaterialTheme.colorScheme.error)
                 }
             }

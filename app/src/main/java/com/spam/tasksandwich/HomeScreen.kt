@@ -99,14 +99,16 @@ fun HomeScreen(
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { paddingValues ->
-        Surface(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
+        Surface(modifier = Modifier.fillMaxSize()) {
             when {
                 uiState.isLoading -> {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator()
                     }
                 }
-                uiState.rooms.isEmpty() -> {
+                // FIX: Only show Empty State if BOTH Rooms AND Tasks are empty.
+                // If you have a Self Task, it will skip this and go to the Dashboard.
+                uiState.rooms.isEmpty() && uiState.groupedTasks.isEmpty() -> {
                     EmptyStateProfile(
                         userProfile = uiState.userProfile,
                         onAddTaskClick = { navController.navigate(Screen.AddSelfTask.route) },
@@ -114,11 +116,18 @@ fun HomeScreen(
                         onCreateRoomClick = { homeViewModel.createRoom("My New Room") }
                     )
                 }
+
                 else -> {
                     HomeDashboard(
                         uiState = uiState,
                         onCompleteTask = { task -> homeViewModel.markTaskComplete(task) },
-                        onRoomClick = { roomId -> navController.navigate(Screen.RoomDetail.createRoute(roomId)) },
+                        onRoomClick = { roomId ->
+                            navController.navigate(
+                                Screen.RoomDetail.createRoute(
+                                    roomId
+                                )
+                            )
+                        },
                         onRoomLongPress = { room -> roomToAction = room }
                     )
                 }
@@ -140,27 +149,32 @@ fun HomeDashboard(
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        Text("My Rooms (${uiState.rooms.size})", style = MaterialTheme.typography.headlineSmall)
-        Spacer(modifier = Modifier.height(8.dp))
-        LazyColumn(
-            modifier = Modifier.heightIn(max = 200.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            items(uiState.rooms) { room ->
-                RoomCard(
-                    room = room,
-                    onClick = { onRoomClick(room.groupId) },
-                    onLongPress = { onRoomLongPress(room) }
-                )
+        // Only show the Rooms section if there are actually rooms
+        if (uiState.rooms.isNotEmpty()) {
+            Text("My Rooms (${uiState.rooms.size})", style = MaterialTheme.typography.headlineSmall)
+            Spacer(modifier = Modifier.height(8.dp))
+            LazyColumn(
+                modifier = Modifier.heightIn(max = 200.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(uiState.rooms) { room ->
+                    RoomCard(
+                        room = room,
+                        onClick = { onRoomClick(room.groupId) },
+                        onLongPress = { onRoomLongPress(room) }
+                    )
+                }
             }
+
+            Spacer(modifier = Modifier.height(24.dp))
+            HorizontalDivider(Modifier, DividerDefaults.Thickness, DividerDefaults.color)
+            Spacer(modifier = Modifier.height(24.dp))
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
-        HorizontalDivider(Modifier, DividerDefaults.Thickness, DividerDefaults.color)
-        Spacer(modifier = Modifier.height(24.dp))
-
+        // Always show tasks
         Text("My Tasks ($totalTasks)", style = MaterialTheme.typography.headlineSmall)
         Spacer(modifier = Modifier.height(8.dp))
+
         if (uiState.groupedTasks.isEmpty()) {
             Box(
                 modifier = Modifier
