@@ -199,8 +199,8 @@ fun MemberListItem(
     onLongPress: () -> Unit
 ) {
     val cardColors = when {
-        isFirstPlace -> CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
-        isCurrentUser -> CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+        isFirstPlace -> CardDefaults.cardColors(containerColor = colorResource(id = R.color.first_greenLight))
+        isCurrentUser -> CardDefaults.cardColors(containerColor = colorResource(id = R.color.second_bluePurple))
         else -> CardDefaults.cardColors()
     }
 
