@@ -35,7 +35,8 @@ data class HomeUiState(
     val groupedTasks: Map<String, List<Task>> = emptyMap(),
     val createdRoomId: String? = null,
     val error: String? = null,
-    val message: String? = null
+    val message: String? = null,
+    val roomBeingDeletedId: String? = null
 )
 
 class HomeViewModel : ViewModel(), RefreshesViewModel {
@@ -215,6 +216,8 @@ class HomeViewModel : ViewModel(), RefreshesViewModel {
             return
         }
 
+        _uiState.update { it.copy(roomBeingDeletedId = room.groupId) }
+
         viewModelScope.launch {
             try {
                 if (room.isAdmin) {
@@ -270,6 +273,10 @@ class HomeViewModel : ViewModel(), RefreshesViewModel {
                 } else {
                     _uiState.update { it.copy(error = "Failed: ${e.message}") }
                 }
+            }finally {
+                // 2. ALWAYS clear the ghost state when done (or if failed)
+                // This ensures the card becomes clickable again if the operation failed.
+                _uiState.update { it.copy(roomBeingDeletedId = null) }
             }
         }
     }

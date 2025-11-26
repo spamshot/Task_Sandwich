@@ -15,6 +15,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -149,32 +150,32 @@ fun HomeDashboard(
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        // Only show the Rooms section if there are actually rooms
-        if (uiState.rooms.isNotEmpty()) {
-            Text("My Rooms (${uiState.rooms.size})", style = MaterialTheme.typography.headlineSmall)
-            Spacer(modifier = Modifier.height(8.dp))
-            LazyColumn(
-                modifier = Modifier.heightIn(max = 200.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(uiState.rooms) { room ->
-                    RoomCard(
-                        room = room,
-                        onClick = { onRoomClick(room.groupId) },
-                        onLongPress = { onRoomLongPress(room) }
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-            HorizontalDivider(Modifier, DividerDefaults.Thickness, DividerDefaults.color)
-            Spacer(modifier = Modifier.height(24.dp))
-        }
-
-        // Always show tasks
-        Text("My Tasks ($totalTasks)", style = MaterialTheme.typography.headlineSmall)
+        Text("My Rooms (${uiState.rooms.size})", style = MaterialTheme.typography.headlineSmall)
         Spacer(modifier = Modifier.height(8.dp))
 
+        LazyColumn(
+            modifier = Modifier.heightIn(max = 200.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            items(uiState.rooms) { room ->
+                // Check if this specific room is the one being deleted
+                val isBeingDeleted = (uiState.roomBeingDeletedId == room.groupId)
+
+                RoomCard(
+                    room = room,
+                    isBeingDeleted = isBeingDeleted, // Pass the status
+                    onClick = { onRoomClick(room.groupId) },
+                    onLongPress = { onRoomLongPress(room) }
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+        HorizontalDivider(Modifier, DividerDefaults.Thickness, DividerDefaults.color)
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Text("My Tasks ($totalTasks)", style = MaterialTheme.typography.headlineSmall)
+        Spacer(modifier = Modifier.height(8.dp))
         if (uiState.groupedTasks.isEmpty()) {
             Box(
                 modifier = Modifier
@@ -192,16 +193,26 @@ fun HomeDashboard(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun RoomCard(room: UserRoom, onClick: () -> Unit, onLongPress: () -> Unit) {
+fun RoomCard(
+    room: UserRoom,
+    isBeingDeleted: Boolean, // New parameter
+    onClick: () -> Unit,
+    onLongPress: () -> Unit
+) {
     val cardColors = if (room.isAdmin) {
         CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
     } else {
         CardDefaults.cardColors()
     }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
+            // 1. Change Opacity: Dim it if deleting (0.5f), normal otherwise (1.0f)
+            .alpha(if (isBeingDeleted) 0.5f else 1f)
             .combinedClickable(
+                // 2. Disable Clicks: Only clickable if NOT being deleted
+                enabled = !isBeingDeleted,
                 onClick = onClick,
                 onLongClick = onLongPress
             ),
@@ -218,12 +229,21 @@ fun RoomCard(room: UserRoom, onClick: () -> Unit, onLongPress: () -> Unit) {
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.weight(1f)
             )
-            Text(
-                text = "${room.userPointsInRoom} pts",
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Bold,
-                color = if (room.isAdmin) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.primary
-            )
+
+            // Optional: Show a little loading spinner instead of points if deleting
+            if (isBeingDeleted) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(24.dp),
+                    strokeWidth = 2.dp
+                )
+            } else {
+                Text(
+                    text = "${room.userPointsInRoom} pts",
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = if (room.isAdmin) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.primary
+                )
+            }
         }
     }
 }
