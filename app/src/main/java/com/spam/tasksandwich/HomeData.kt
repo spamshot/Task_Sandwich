@@ -32,7 +32,12 @@ data class Task(
     val repeatOption: String = "Never",
     val groupId: String? = null,
     val dueDate: Timestamp? = null,
-    val sharedTaskId: String? = null
+    val sharedTaskId: String? = null,
+    val assignedToUserId: String = "",
+    val assignedByUserId: String = "",
+    val status: String = "assigned",
+    val isPersonal: Boolean = false,
+    val createdAt: Timestamp? = null
 )
 
 /**

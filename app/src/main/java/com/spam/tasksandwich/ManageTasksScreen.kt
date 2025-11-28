@@ -318,6 +318,7 @@ fun AssignTaskForm(uiState: ManageTasksUiState, viewModel: ManageTasksViewModel)
  */
 @Composable
 fun AssignedTasksList(uiState: ManageTasksUiState, viewModel: ManageTasksViewModel) {
+    // 1. Prepare the grouped data
     val groupedOneTimeTasks = remember(uiState.oneTimeTasks) {
         uiState.oneTimeTasks.groupBy { it.sharedTaskId ?: it.id }
     }
@@ -325,18 +326,48 @@ fun AssignedTasksList(uiState: ManageTasksUiState, viewModel: ManageTasksViewMod
         uiState.repeatingTasks.groupBy { it.sharedTaskId ?: it.id }
     }
 
+    // 2. Check if the list is completely empty
+    val isListEmpty = uiState.autoAssignTemplates.isEmpty() &&
+            groupedRepeatingTasks.isEmpty() &&
+            groupedOneTimeTasks.isEmpty()
+
     if (uiState.isLoading) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+        // Loading State
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator()
+        }
+    } else if (isListEmpty) {
+        // Empty State (This fixes the "Just shows loading wheel" or "Blank screen" issue)
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text(
+                text = "No tasks to manage",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     } else {
+        // Content State
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // Section 1: Auto-Assign Tasks
-            item { Text("Auto-Assign Tasks (for new members)", style = MaterialTheme.typography.titleLarge) }
+            // --- Section 1: Auto-Assign Tasks ---
+            item {
+                Text(
+                    text = "Auto-Assign Tasks (for new members)",
+                    style = MaterialTheme.typography.titleLarge
+                )
+            }
+
             if (uiState.autoAssignTemplates.isEmpty()) {
-                item { Text("None.", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                item {
+                    Text(
+                        text = "None.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                }
             } else {
                 items(uiState.autoAssignTemplates, key = { it.id }) { template ->
                     AutoAssignTaskCard(
@@ -346,38 +377,57 @@ fun AssignedTasksList(uiState: ManageTasksUiState, viewModel: ManageTasksViewMod
                 }
             }
 
-            // Section 2: Repeating Tasks
+            // --- Section 2: Repeating Tasks ---
             item {
                 Divider(modifier = Modifier.padding(vertical = 16.dp))
-                Text("Repeating Tasks", style = MaterialTheme.typography.titleLarge)
+                Text(
+                    text = "Repeating Tasks",
+                    style = MaterialTheme.typography.titleLarge
+                )
             }
+
             if (groupedRepeatingTasks.isEmpty()) {
-                item { Text("None.", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                item {
+                    Text(
+                        text = "None.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                }
             } else {
                 items(groupedRepeatingTasks.entries.toList(), key = { it.key }) { (_, tasks) ->
                     val representativeTask = tasks.first()
                     AssignedTaskCard(
                         task = representativeTask,
                         assignedCount = tasks.size,
-                        onDelete = { tasks.forEach { viewModel.deleteTask(it.id) } }
+                        onDelete = { viewModel.deleteTaskGroup(tasks) }
                     )
                 }
             }
 
-            // Section 3: One-Time Assigned Tasks
+            // --- Section 3: One-Time Assigned Tasks ---
             item {
                 Divider(modifier = Modifier.padding(vertical = 16.dp))
-                Text("One-Time Assigned Tasks", style = MaterialTheme.typography.titleLarge)
+                Text(
+                    text = "One-Time Assigned Tasks",
+                    style = MaterialTheme.typography.titleLarge
+                )
             }
+
             if (groupedOneTimeTasks.isEmpty()) {
-                item { Text("None.", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                item {
+                    Text(
+                        text = "None.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             } else {
                 items(groupedOneTimeTasks.entries.toList(), key = { it.key }) { (_, tasks) ->
                     val representativeTask = tasks.first()
                     AssignedTaskCard(
                         task = representativeTask,
                         assignedCount = tasks.size,
-                        onDelete = { tasks.forEach { viewModel.deleteTask(it.id) } }
+                        onDelete = { viewModel.deleteTaskGroup(tasks) }
                     )
                 }
             }
