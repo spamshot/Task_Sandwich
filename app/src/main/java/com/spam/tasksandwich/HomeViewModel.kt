@@ -1,14 +1,12 @@
 package com.spam.tasksandwich
 
 import android.util.Log
-import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.Firebase
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.auth
 import com.google.firebase.firestore.FieldValue
-import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.firestore
 import com.google.firebase.functions.functions
 import kotlinx.coroutines.flow.MutableStateFlow

@@ -14,8 +14,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
-import com.spam.tasksandwich.ShopItem
-import com.spam.tasksandwich.PurchaseLogItem
+
 
 data class ManageShopUiState(
     val isLoading: Boolean = true,

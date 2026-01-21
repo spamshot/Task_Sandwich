@@ -1,6 +1,6 @@
 package com.spam.tasksandwich
 
-// In SplashViewModel.kt
+
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.Firebase

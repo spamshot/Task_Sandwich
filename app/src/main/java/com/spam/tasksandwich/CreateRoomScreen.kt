@@ -7,7 +7,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-
+//todo we don't need this file anymore
 //@Composable
 //fun CreateRoomScreen(
 //    onRoomCreated: (String) -> Unit, // Callback with the new room's ID

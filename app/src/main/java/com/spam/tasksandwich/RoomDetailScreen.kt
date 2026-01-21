@@ -2,7 +2,7 @@ package com.spam.tasksandwich
 
 
 
-import android.R.id.tabs
+
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -22,7 +22,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -35,39 +34,21 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Divider
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.res.colorResource
-import androidx.compose.ui.text.style.TextAlign
-import com.google.firebase.Timestamp
-import java.text.SimpleDateFormat
-import java.util.Locale
 import kotlin.math.roundToInt
-import com.spam.tasksandwich.UserProfileCard
+
 
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -116,6 +97,8 @@ fun RoomDetailScreen(
             onNavigateBack()
         }
     }
+
+    //Leaderboard Card popup for user profile
 
     if (uiState.selectedUserProfile != null || uiState.isLoadingProfileForDialog) {
         AlertDialog(
@@ -467,5 +450,3 @@ fun CompactTaskItem(task: AggregatedTask, isAdmin: Boolean) {
         }
     }
 }
-
-//Todo we no longer need delete room in this part, we don't have Edit room here any more

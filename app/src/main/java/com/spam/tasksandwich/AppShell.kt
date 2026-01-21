@@ -147,7 +147,7 @@ fun AppShell(
     val currentScreenTitle = when (currentRoute) {
         Screen.Home.route -> "Home Dashboard"
         Screen.RoomDetail.route -> "Room Details"
-        Screen.ManageSelfTasks.route -> "Add Personal Task"
+        Screen.ManageSelfTasks.route -> "Manage Self Task"
         Screen.JoinRoom.route -> "Join a Room"
         Screen.ProfileSettings.route -> "Profile Settings"
         Screen.ManageTasks.route -> "Manage Tasks"

@@ -1,6 +1,5 @@
 package com.spam.tasksandwich
 
-import android.util.Log
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -13,7 +12,6 @@ import com.google.firebase.firestore.firestore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
-import com.spam.tasksandwich.ShopItem
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 

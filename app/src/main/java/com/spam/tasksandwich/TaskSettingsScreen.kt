@@ -14,6 +14,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+//todo we don't need this file anymore
 
 //@OptIn(ExperimentalMaterial3Api::class)
 //@Composable
