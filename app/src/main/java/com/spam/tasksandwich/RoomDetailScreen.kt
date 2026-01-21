@@ -67,6 +67,7 @@ import com.google.firebase.Timestamp
 import java.text.SimpleDateFormat
 import java.util.Locale
 import kotlin.math.roundToInt
+import com.spam.tasksandwich.UserProfileCard
 
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -116,6 +117,39 @@ fun RoomDetailScreen(
         }
     }
 
+    if (uiState.selectedUserProfile != null || uiState.isLoadingProfileForDialog) {
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissUserProfileView() },
+            confirmButton = {
+                TextButton(onClick = { viewModel.dismissUserProfileView() }) {
+                    Text("Close")
+                }
+            },
+            // The content of the dialog
+            text = {
+                if (uiState.isLoadingProfileForDialog) {
+                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
+                } else {
+                    uiState.selectedUserProfile?.let { profile ->
+
+                        val memberInRoom = uiState.members.find { it.userId == profile.uid }
+                        val pointsInThisRoom = memberInRoom?.totalPointsInGroup ?: 0
+
+                        UserProfileCard(
+                            name = profile.name,
+//                            email = profile.email ?: "",
+                            pointsInRoom = pointsInThisRoom,
+                            totalPoints = profile.totalPoints,
+                            iconId = profile.selectedIconId ?: "avatar_1"
+                        )
+                    }
+                }
+            }
+        )
+    }
+
     Scaffold { paddingValues ->
         if (uiState.isLoading) {
             Box(
@@ -161,7 +195,10 @@ fun RoomDetailScreen(
                         onViewShopClick = onViewShopClick,
                         onNavigateToManageTasks = onNavigateToManageTasks,
                         onCreateShopClick = onCreateShopClick,
-                        onMemberLongPress = { memberToKick = it }
+                        onMemberLongPress = { memberToKick = it },
+                        onMemberClick = { member ->
+                            viewModel.selectUserForProfileView(member.userId)
+                        }
                     )
 
                     1 -> TopTasksTab(uiState = uiState)
@@ -196,7 +233,8 @@ fun MemberListItem(
     member: RoomMember,
     isFirstPlace: Boolean,
     isCurrentUser: Boolean,
-    onLongPress: () -> Unit
+    onLongPress: () -> Unit,
+    onClick: () -> Unit
 ) {
     val cardColors = when {
         isFirstPlace -> CardDefaults.cardColors(containerColor = colorResource(id = R.color.first_greenLight))
@@ -209,7 +247,8 @@ fun MemberListItem(
             .fillMaxWidth()
             .pointerInput(Unit) {
                 detectTapGestures(
-                    onLongPress = { onLongPress() }
+                    onLongPress = { onLongPress() },
+                    onTap = { onClick() }
                 )
             },
         colors = cardColors
@@ -245,7 +284,8 @@ fun LeaderboardTabContent(
     onViewShopClick: () -> Unit,
     onNavigateToManageTasks: () -> Unit,
     onCreateShopClick: () -> Unit,
-    onMemberLongPress: (RoomMember) -> Unit
+    onMemberLongPress: (RoomMember) -> Unit,
+    onMemberClick: (RoomMember) -> Unit
 ) {
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -281,7 +321,8 @@ fun LeaderboardTabContent(
                             if (uiState.isAdmin && member.userId != uiState.currentUserId) {
                                 onMemberLongPress(member)
                             }
-                        }
+                        },
+                        onClick = { onMemberClick(member) }
                     )
                 }
             }

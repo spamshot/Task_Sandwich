@@ -63,67 +63,109 @@ class HomeViewModel : ViewModel(), RefreshesViewModel {
             return
         }
 
-        // 1. Listen to User Profile (to get list of rooms joined)
-        db.collection("users").document(currentUser.uid).addSnapshotListener { snapshot, error ->
-            if (error != null) {
-                _uiState.update { it.copy(error = "Failed to load user profile.") }
-                return@addSnapshotListener
-            }
-
-            if (snapshot != null && snapshot.exists()) {
-                val user = snapshot.toObject(UserProfile::class.java)
-                @Suppress("UNCHECKED_CAST")
-                val roomsData = snapshot.get("groupsJoined") as? List<HashMap<String, String>> ?: emptyList()
-
-                viewModelScope.launch {
-                    // Enrich room data (Fetch points and admin status for each room)
-                    val roomJobs = roomsData.map { roomMap ->
-                        async {
-                            val groupId = roomMap["groupId"] ?: ""
-                            val groupName = roomMap["groupName"] ?: "Unnamed Room"
-                            var points = 0
-                            var isAdmin = false
-
-                            if (groupId.isNotEmpty()) {
-                                // Check if Admin
-                                val groupDoc = db.collection("groups").document(groupId).get().await()
-                                if (groupDoc.exists()) {
-                                    isAdmin = groupDoc.getString("adminUserId") == currentUser.uid
-                                }
-
-                                // Check Points in Room
-                                val memberDoc = db.collection("groups").document(groupId)
-                                    .collection("groupMembers").document(currentUser.uid)
-                                    .get().await()
-
-                                if (memberDoc.exists()) {
-                                    points = memberDoc.getLong("totalPointsInGroup")?.toInt() ?: 0
-                                }
-                            }
-                            UserRoom(groupId, groupName, points, isAdmin)
-                        }
-                    }
-                    userRooms = roomJobs.awaitAll()
-                    _uiState.update { it.copy(userProfile = user, rooms = userRooms, isLoading = false) }
-                    updateGroupedTasks()
-                }
-            } else {
+        var userListenerLoaded = false
+        var tasksListenerLoaded = false
+        fun checkCompletion() {
+            if (userListenerLoaded && tasksListenerLoaded) {
                 _uiState.update { it.copy(isLoading = false) }
             }
         }
 
-        // 2. Listen to Assigned Tasks
-        db.collection("tasks")
+        // Listener 1: Fetches user profile data, then asynchronously enriches the room data.
+        val userDocRef = db.collection("users").document(currentUser.uid)
+        userDocRef.addSnapshotListener { snapshot, error ->
+            if (error != null) {
+                _uiState.update { it.copy(error = "Failed to load user profile.") }
+                userListenerLoaded = true
+                checkCompletion()
+                return@addSnapshotListener
+            }
+
+            if (snapshot != null && snapshot.exists()) {
+                // 1. Immediately map the user profile data.
+                val user = snapshot.toObject(UserProfile::class.java)
+
+                // 2. Immediately update the UI state with the latest user profile.
+                // This is the critical fix that ensures point changes are reflected instantly.
+                _uiState.update { it.copy(userProfile = user) }
+
+                @Suppress("UNCHECKED_CAST")
+                val roomsData = snapshot.get("groupsJoined") as? List<HashMap<String, String>> ?: emptyList()
+
+                // 3. Kick off the asynchronous work to fetch points for each room.
+                viewModelScope.launch {
+                    try {
+                        val roomJobs = roomsData.map { roomMap ->
+                            this.async {
+                                val groupId = roomMap["groupId"] ?: ""
+                                val groupName = roomMap["groupName"] ?: "Unnamed Room"
+                                var points = 0
+                                var isAdmin = false
+
+                                if (groupId.isNotEmpty()) {
+                                    val groupDoc = db.collection("groups").document(groupId).get().await()
+                                    if (groupDoc.exists()) {
+                                        isAdmin = groupDoc.getString("adminUserId") == currentUser.uid
+                                    }
+
+                                    val memberDoc = db.collection("groups").document(groupId)
+                                        .collection("groupMembers").document(currentUser.uid)
+                                        .get().await()
+                                    if (memberDoc.exists()) {
+                                        points = memberDoc.getLong("totalPointsInGroup")?.toInt() ?: 0
+                                    }
+                                }
+                                UserRoom(groupId, groupName, points, isAdmin)
+                            }
+                        }
+                        val roomsListWithPoints = roomJobs.awaitAll()
+
+                        // 4. Update the UI state AGAIN, this time with the fully enriched room data.
+                        _uiState.update { it.copy(rooms = roomsListWithPoints) }
+
+                    } catch (e: Exception) {
+                        _uiState.update { it.copy(error = "Error loading room points.") }
+                    } finally {
+                        // This block is guaranteed to run, ensuring the listener is marked as "loaded".
+                        userListenerLoaded = true
+                        checkCompletion()
+                    }
+                }
+            } else {
+                // If the user document doesn't exist, we still count this listener as "loaded".
+                userListenerLoaded = true
+                checkCompletion()
+            }
+        }
+
+        // Listener 2: Fetches tasks assigned to the current user.
+        val tasksQuery = db.collection("tasks")
             .whereEqualTo("assignedToUserId", currentUser.uid)
             .whereEqualTo("status", "assigned")
-            .addSnapshotListener { snapshot, _ ->
-                if (snapshot != null) {
-                    userTasks = snapshot.documents.mapNotNull { doc ->
-                        doc.toObject(Task::class.java)?.copy(id = doc.id)
+        tasksQuery.addSnapshotListener { snapshot, error ->
+            if (error != null) {
+                _uiState.update { it.copy(error = "Failed to load tasks.") }
+                tasksListenerLoaded = true
+                checkCompletion()
+                return@addSnapshotListener
+            }
+            if (snapshot != null) {
+                val tasks = snapshot.documents.mapNotNull { doc ->
+                    doc.toObject(Task::class.java)?.copy(id = doc.id)
+                }
+                _uiState.update { currentState ->
+                    val rooms = currentState.rooms
+                    val grouped = tasks.groupBy { task ->
+                        val room = rooms.find { it.groupId == task.groupId }
+                        val roomName = room?.groupName ?: "Personal Tasks"
+                        "$roomName - from ${task.assignedByName}"
                     }
-                    updateGroupedTasks()
+                    currentState.copy(groupedTasks = grouped)
                 }
             }
+            tasksListenerLoaded = true
+            checkCompletion()
+        }
     }
 
     private fun updateGroupedTasks() {
@@ -238,26 +280,62 @@ class HomeViewModel : ViewModel(), RefreshesViewModel {
         _uiState.update { it.copy(createdRoomId = null) }
     }
 
+    /**
+     * Marks a given task as complete and atomically increments the correct point totals.
+     * This function uses a batch write to ensure all database operations succeed or fail together.
+     *
+     * @param task The Task object to be marked as complete.
+     */
     fun markTaskComplete(task: Task) {
+        // Get the currently authenticated user. If no one is logged in, do nothing.
         val currentUser = auth.currentUser ?: return
+
+        // Launch a coroutine in the ViewModel's scope for this background database operation.
         viewModelScope.launch {
             try {
+                // A batch write allows us to perform multiple writes as a single atomic unit.
                 val batch = db.batch()
+
+                // 1. Get a reference to the specific task document.
                 val taskRef = db.collection("tasks").document(task.id)
-                batch.update(taskRef, "status", "completed", "handledAt", Timestamp.now())
+                // Update the task's status and add a timestamp for when it was handled.
+                batch.update(
+                    taskRef,
+                    "status", "completed",
+                    "handledAt", Timestamp.now()
+                )
 
+                // 2. Get a reference to the current user's document.
                 val userRef = db.collection("users").document(currentUser.uid)
-                batch.update(userRef, "totalPoints", FieldValue.increment(task.points.toLong()))
 
-                task.groupId?.let { roomId ->
-                    if (roomId.isNotEmpty()) {
-                        val memberRef = db.collection("groups").document(roomId)
-                            .collection("groupMembers").document(currentUser.uid)
-                        batch.update(memberRef, "totalPointsInGroup", FieldValue.increment(task.points.toLong()))
+                // 3. THE CRITICAL FIX: Check if the task is personal or a group task.
+                // We do this by checking if the groupId is null or empty. This is the most
+                // robust method and works for both old and new personal tasks.
+                if (task.groupId.isNullOrEmpty()) {
+                    // If there is no groupId, it's a personal task. Increment 'totalSelfPoints'.
+                    batch.update(userRef, "totalSelfPoints", FieldValue.increment(task.points.toLong()))
+                } else {
+                    // If there is a groupId, it's a group task.
+
+                    // A) Increment the user's global 'totalPoints' for group-related activities.
+                    batch.update(userRef, "totalPoints", FieldValue.increment(task.points.toLong()))
+
+                    // B) Increment the room-specific 'totalPointsInGroup' for the leaderboard.
+                    task.groupId?.let { roomId ->
+                        if (roomId.isNotEmpty()) {
+                            val memberRef = db.collection("groups").document(roomId)
+                                .collection("groupMembers").document(currentUser.uid)
+                            batch.update(memberRef, "totalPointsInGroup", FieldValue.increment(task.points.toLong()))
+                        }
                     }
                 }
+
+                // 4. Commit all prepared operations to the database at once.
                 batch.commit().await()
+
             } catch (e: Exception) {
+                // If anything fails (e.g., network error, permissions issue),
+                // update the UI state with an error message.
                 _uiState.update { it.copy(error = "Could not complete task: ${e.message}") }
             }
         }

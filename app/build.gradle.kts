@@ -30,14 +30,16 @@ android {
         }
     }
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
-    }
-    kotlinOptions {
-        jvmTarget = "11"
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
     buildFeatures {
         compose = true
+    }
+}
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
     }
 }
 
@@ -58,6 +60,7 @@ dependencies {
     implementation(libs.googleid)
     implementation(libs.androidx.compose.ui.text)
     implementation(libs.firebase.appcheck.debug)
+    implementation(libs.androidx.compose.foundation)
 //    implementation(libs.firebase.functions.ktx)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
@@ -74,7 +77,7 @@ dependencies {
     implementation("androidx.navigation:navigation-compose:2.9.6")
 
     // Firebase Bill of Materials (BoM) - This handles versions for other Firebase libs
-    implementation(platform("com.google.firebase:firebase-bom:34.6.0"))
+    implementation(platform("com.google.firebase:firebase-bom:34.8.0"))
 
     implementation("com.google.firebase:firebase-functions:22.1.0")
     implementation("com.google.firebase:firebase-appcheck-playintegrity")

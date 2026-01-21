@@ -54,7 +54,9 @@ data class RoomDetailUiState(
     val error: String? = null,
     val isRoomDeleted: Boolean = false,
     val topTasks: List<AggregatedTask> = emptyList(),
-    val currentUserId: String = ""
+    val currentUserId: String = "",
+    val selectedUserProfile: UserProfile? = null,
+    val isLoadingProfileForDialog: Boolean = false,
 )
 
 class RoomDetailViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
@@ -96,6 +98,32 @@ class RoomDetailViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
                 _uiState.update { it.copy(error = "Failed to update name: ${e.message}") }
             }
         }
+    }
+
+    //Fetches the full UserProfile for a given userId.
+    fun selectUserForProfileView(userId: String) {
+        _uiState.update { it.copy(isLoadingProfileForDialog = true, selectedUserProfile = null) }
+
+        viewModelScope.launch {
+            try {
+                val userDoc = db.collection("users").document(userId).get().await()
+                if (userDoc.exists()) {
+                    // --- THE FIX ---
+                    val profile = userDoc.toObject(UserProfile::class.java)?.copy(uid = userDoc.id)
+                    // ---------------
+
+                    _uiState.update { it.copy(isLoadingProfileForDialog = false, selectedUserProfile = profile) }
+                } else {
+                    _uiState.update { it.copy(isLoadingProfileForDialog = false, error = "User profile not found.") }
+                }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isLoadingProfileForDialog = false, error = e.message) }
+            }
+        }
+    }
+//Clears the selected user profile, which will dismiss the dialog.
+    fun dismissUserProfileView() {
+        _uiState.update { it.copy(selectedUserProfile = null) }
     }
 
     fun deleteRoom() {

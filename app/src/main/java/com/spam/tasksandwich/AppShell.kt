@@ -12,19 +12,13 @@ import kotlinx.coroutines.launch
 import androidx.compose.material.icons.filled.Settings
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Face
-import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextButton
 import androidx.compose.ui.text.input.KeyboardType
-import com.spam.tasksandwich.AppNavHost
-import com.spam.tasksandwich.Screen
 
 data class NavDrawerItem(
     val route: String,
@@ -142,7 +136,9 @@ fun AppShell(
 
     val drawerItems = listOf(
         NavDrawerItem(Screen.Home.route, "Home", Icons.Default.Home),
-        NavDrawerItem(Screen.AddSelfTask.route, "Add Personal Task", Icons.Default.Person),
+
+        NavDrawerItem(Screen.ManageSelfTasks.route, "Manage Self Tasks", Icons.Default.Person),
+
         NavDrawerItem(Screen.CreateRoom.route, "Create Room", Icons.Default.Check),
         NavDrawerItem(Screen.JoinRoom.route, "Join Room", Icons.Default.Home),
         NavDrawerItem(Screen.ProfileSettings.route, "Profile Settings", Icons.Default.Settings)
@@ -151,7 +147,7 @@ fun AppShell(
     val currentScreenTitle = when (currentRoute) {
         Screen.Home.route -> "Home Dashboard"
         Screen.RoomDetail.route -> "Room Details"
-        Screen.AddSelfTask.route -> "Add Personal Task"
+        Screen.ManageSelfTasks.route -> "Add Personal Task"
         Screen.JoinRoom.route -> "Join a Room"
         Screen.ProfileSettings.route -> "Profile Settings"
         Screen.ManageTasks.route -> "Manage Tasks"

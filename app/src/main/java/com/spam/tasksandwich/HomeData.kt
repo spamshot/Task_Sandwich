@@ -9,7 +9,8 @@ import com.google.firebase.Timestamp
 data class UserProfile(
     val uid: String = "",
     val name: String = "User",
-    val totalPoints: Int = 0,
+    val totalPoints: Int = 0, // Used for Joined room points not self points
+    val totalSelfPoints: Int = 0, // Used for self points
     val age: Int? = null,
     val email: String? = null,
     val selectedIconId: String? = null,

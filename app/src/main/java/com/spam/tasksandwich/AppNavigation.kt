@@ -23,7 +23,7 @@ sealed class Screen(val route: String) {
     object Auth : Screen("auth_screen")
     object ProfileSetup : Screen("profile_setup_screen")
     object Home : Screen("home_screen")
-    object AddSelfTask : Screen("add_self_task_screen")
+    object ManageSelfTasks : Screen("manage_self_tasks_screen")
     object JoinRoom : Screen("join_room_screen")
     object ProfileSettings : Screen("profile_settings_screen")
     object CreateRoom : Screen("create_room_screen")
@@ -103,10 +103,9 @@ fun AppNavHost(
             )
         }
 
-        composable(Screen.AddSelfTask.route) {
-            AddSelfTaskScreen(
-                onGoBack = { navController.popBackStack() },
-                onNavigateToSettings = { navController.navigate(Screen.ProfileSettings.route) }
+        composable(Screen.ManageSelfTasks.route) {
+            ManageSelfTasksScreen(
+                onGoBack = { navController.popBackStack() }
             )
         }
 

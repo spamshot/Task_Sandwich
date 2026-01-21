@@ -112,7 +112,7 @@ fun HomeScreen(
                 uiState.rooms.isEmpty() && uiState.groupedTasks.isEmpty() -> {
                     EmptyStateProfile(
                         userProfile = uiState.userProfile,
-                        onAddTaskClick = { navController.navigate(Screen.AddSelfTask.route) },
+                        onAddTaskClick = { navController.navigate(Screen.ManageSelfTasks.route) },
                         onJoinRoomClick = { navController.navigate(Screen.JoinRoom.route) },
                         onCreateRoomClick = { homeViewModel.createRoom("My New Room") }
                     )
@@ -265,11 +265,18 @@ fun EmptyStateProfile(
     ) {
         Text("Welcome, ${userProfile?.name ?: "User"}!", style = MaterialTheme.typography.headlineLarge)
         Spacer(modifier = Modifier.height(8.dp))
+
         Text(
-            "Total Points: ${userProfile?.totalPoints ?: 0}",
+            "Total Group Points: ${userProfile?.totalPoints ?: 0}",
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.primary
         )
+        Text(
+            "Total Personal Points: ${userProfile?.totalSelfPoints ?: 0}",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.secondary // Use a different color to distinguish
+        )
+
         Spacer(modifier = Modifier.height(48.dp))
         Text(
             "No task for today? Let's add one from settings!",

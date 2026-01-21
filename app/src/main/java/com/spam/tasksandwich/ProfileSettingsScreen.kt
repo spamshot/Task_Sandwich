@@ -29,6 +29,7 @@ import com.google.firebase.Timestamp
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Locale
+import com.spam.tasksandwich.UserProfileCard
 
 
 @Composable
@@ -158,8 +159,15 @@ fun ProfileSettingsForm(uiState: ProfileSettingsUiState, viewModel: ProfileSetti
                 Spacer(Modifier.height(16.dp))
                 OutlinedTextField(value = email, onValueChange = { email = it }, label = { Text("Email") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email), modifier = Modifier.fillMaxWidth())
 
-                UserCard(name = name, email = email, selectedIconId = selectedIconId)
-
+                uiState.userProfile?.let {
+                    UserProfileCard(
+                        name = it.name,
+//                        email = it.email ?: "",
+                        pointsInRoom = 0,
+                        totalPoints = it.totalPoints,
+                        iconId = it.selectedIconId ?: "avatar_1"
+                    )
+                }
 
                 Spacer(Modifier.weight(1f)) // Pushes buttons to the bottom
 
@@ -180,6 +188,7 @@ fun ProfileSettingsForm(uiState: ProfileSettingsUiState, viewModel: ProfileSetti
                 ) {
                     Text("Logout", color = MaterialTheme.colorScheme.error)
                 }
+
             }
         }
     }
@@ -215,34 +224,6 @@ fun TaskHistoryList(
     onNavigateToEdit: (String) -> Unit
 ) {
     var taskToAction by remember { mutableStateOf<Task?>(null) }
-
-    // No longer needed for "History"
-//    if (taskToAction != null) {
-//        AlertDialog(
-//            onDismissRequest = { taskToAction = null },
-//            title = { Text("Task Options") },
-//            text = { Text("What would you like to do with '${taskToAction!!.title}'?") },
-//            confirmButton = {
-//                TextButton(
-//                    onClick = {
-//                        onNavigateToEdit(taskToAction!!.id)
-//                        taskToAction = null
-//                    }
-//                ) { Text("Edit") }
-//            },
-//            dismissButton = {
-//                Row {
-//                    TextButton(
-//                        onClick = {
-//                            viewModel.deleteTask(taskToAction!!.id)
-//                            taskToAction = null
-//                        }
-//                    ) { Text("Delete", color = MaterialTheme.colorScheme.error) }
-//                    TextButton(onClick = { taskToAction = null }) { Text("Cancel") }
-//                }
-//            }
-//        )
-//    }
 
     Scaffold(
     ) { paddingValues ->
@@ -394,56 +375,4 @@ fun IconSelector(selectedIconId: String, onIconSelected: (String) -> Unit) {
 // Helper function to format a Timestamp into a readable date string.
 private fun formatTimestamp(timestamp: Timestamp): String {
     return SimpleDateFormat("MMM dd, yyyy", Locale.getDefault()).format(timestamp.toDate())
-}
-
-// UserCard just a demo for Profile card view
-@Composable
-fun UserCard(name: String, email: String, selectedIconId: String) {
-    val presetIconMap = remember {
-        mapOf(
-            "avatar_1" to R.drawable.carrotdog,
-            "avatar_2" to R.drawable.dallebabyface,
-            "avatar_3" to R.drawable.fglasses,
-            "avatar_4" to R.drawable.firehairguy,
-            "avatar_5" to R.drawable.vgfbhbluehair
-        )
-    }
-    val iconResId = presetIconMap[selectedIconId] ?: R.drawable.carrotdog // Default icon
-
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 24.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Image(
-                painter = painterResource(id = iconResId),
-                contentDescription = "User Avatar",
-                modifier = Modifier
-                    .size(60.dp)
-                    .clip(CircleShape)
-            )
-
-            Spacer(modifier = Modifier.width(16.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = name,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = email,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-    }
 }
