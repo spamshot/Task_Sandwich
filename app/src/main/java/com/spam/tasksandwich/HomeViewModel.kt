@@ -285,41 +285,53 @@ class HomeViewModel : ViewModel(), RefreshesViewModel {
      * @param task The Task object to be marked as complete.
      */
     fun markTaskComplete(task: Task) {
-        // Get the currently authenticated user. If no one is logged in, do nothing.
         val currentUser = auth.currentUser ?: return
-
-        // Launch a coroutine in the ViewModel's scope for this background database operation.
         viewModelScope.launch {
             try {
-                // A batch write allows us to perform multiple writes as a single atomic unit.
                 val batch = db.batch()
-
-                // 1. Get a reference to the specific task document.
                 val taskRef = db.collection("tasks").document(task.id)
-                // Update the task's status and add a timestamp for when it was handled.
-                batch.update(
-                    taskRef,
-                    "status", "completed",
-                    "handledAt", Timestamp.now()
-                )
 
-                // 2. Get a reference to the current user's document.
+                batch.update(taskRef, "status", "completed", "handledAt", Timestamp.now())
+
                 val userRef = db.collection("users").document(currentUser.uid)
 
-                // 3. THE CRITICAL FIX: Check if the task is personal or a group task.
-                // We do this by checking if the groupId is null or empty. This is the most
-                // robust method and works for both old and new personal tasks.
                 if (task.groupId.isNullOrEmpty()) {
-                    // If there is no groupId, it's a personal task. Increment 'totalSelfPoints'.
+                    // It's a personal task.
+
+                    // --- NEW ACHIEVEMENT LOGIC ---
+
+                    // 1. Get the user's current profile from our state to know their current points.
+                    val userProfile = _uiState.value.userProfile
+                    if (userProfile != null) {
+                        // 2. Calculate what the new point total WILL be.
+                        val newTotalSelfPoints = userProfile.totalSelfPoints + task.points
+
+                        // 3. Define our milestones.
+                        // We map the required score to the icon ID that gets unlocked.
+                        val milestones = mapOf(
+                            10 to "avatar_milestone_10",
+                            25 to "avatar_milestone_25",
+                            50 to "avatar_milestone_50"
+                        )
+
+                        // 4. Check if any new milestones have been crossed.
+                        milestones.forEach { (score, iconId) ->
+                            // If the new score is high enough AND the user doesn't already have the icon...
+                            if (newTotalSelfPoints >= score && !userProfile.unlockedIconIds.contains(iconId)) {
+                                // ...add the operation to our batch to unlock it!
+                                batch.update(userRef, "unlockedIconIds", FieldValue.arrayUnion(iconId))
+                            }
+                        }
+                    }
+                    // --- END OF NEW LOGIC ---
+
+                    // Increment 'totalSelfPoints' (this is the original logic)
                     batch.update(userRef, "totalSelfPoints", FieldValue.increment(task.points.toLong()))
+
                 } else {
-                    // If there is a groupId, it's a group task.
-
-                    // A) Increment the user's global 'totalPoints' for group-related activities.
+                    // It's a group task. This logic is unchanged.
                     batch.update(userRef, "totalPoints", FieldValue.increment(task.points.toLong()))
-
-                    // B) Increment the room-specific 'totalPointsInGroup' for the leaderboard.
-                    task.groupId?.let { roomId ->
+                    task.groupId.let { roomId ->
                         if (roomId.isNotEmpty()) {
                             val memberRef = db.collection("groups").document(roomId)
                                 .collection("groupMembers").document(currentUser.uid)
@@ -328,16 +340,13 @@ class HomeViewModel : ViewModel(), RefreshesViewModel {
                     }
                 }
 
-                // 4. Commit all prepared operations to the database at once.
                 batch.commit().await()
-
             } catch (e: Exception) {
-                // If anything fails (e.g., network error, permissions issue),
-                // update the UI state with an error message.
                 _uiState.update { it.copy(error = "Could not complete task: ${e.message}") }
             }
         }
     }
+
 
     fun leaveOrDeleteRoom(room: UserRoom) {
         val currentUser = auth.currentUser

@@ -1,6 +1,7 @@
 package com.spam.tasksandwich
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -12,6 +13,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -148,6 +151,7 @@ fun ProfileSettingsForm(uiState: ProfileSettingsUiState, viewModel: ProfileSetti
                 Text("Choose your Icon", style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(8.dp))
                 IconSelector(
+                    unlockedIconIds = uiState.userProfile?.unlockedIconIds ?: emptyList(),
                     selectedIconId = selectedIconId,
                     onIconSelected = { selectedIconId = it }
                 )
@@ -335,38 +339,85 @@ fun TransactionHistoryItem(purchase: UserPurchaseLogItem) {
 /**
  * A composable that displays a scrollable row of selectable preset icons.
  */
+
+
 @Composable
-fun IconSelector(selectedIconId: String, onIconSelected: (String) -> Unit) {
+fun IconSelector(
+    unlockedIconIds: List<String>,
+    selectedIconId: String,
+    onIconSelected: (String) -> Unit
+) {
+    // 1. Define all possible icons
+    val defaultIcons = listOf("avatar_1", "avatar_2", "avatar_3", "avatar_4", "avatar_5")
+    val milestoneIcons = mapOf(
+        "avatar_milestone_10" to 10,
+        "avatar_milestone_25" to 25,
+        "avatar_milestone_50" to 50
+    )
+
+    // 2. Combine the lists for display
+    val availableIcons = (defaultIcons + unlockedIconIds).distinct()
+
     val presetIconMap = remember {
         mapOf(
-            "avatar_1" to R.drawable.carrotdog,
-            "avatar_2" to R.drawable.dallebabyface,
-            "avatar_3" to R.drawable.fglasses,
-            "avatar_4" to R.drawable.firehairguy,
-            "avatar_5" to R.drawable.vgfbhbluehair
+            "avatar_1" to R.drawable.carrotdog, "avatar_2" to R.drawable.dallebabyface,
+            "avatar_3" to R.drawable.fglasses, "avatar_4" to R.drawable.firehairguy,
+            "avatar_5" to R.drawable.vgfbhbluehair,
+            "avatar_milestone_10" to R.drawable.bluehairguy,
+            "avatar_milestone_25" to R.drawable.fzombie,
+            "avatar_milestone_50" to R.drawable.guywithglasses
         )
     }
-    LazyRow(
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        contentPadding = PaddingValues(horizontal = 16.dp)
-    ) {
-        items(presetIconMap.entries.toList()) { (iconId, resId) ->
-            Box(
-                modifier = Modifier
-                    .size(64.dp)
-                    .clip(CircleShape)
-                    .clickable { onIconSelected(iconId) }
-                    .border(
-                        width = if (selectedIconId == iconId) 3.dp else 0.dp,
-                        color = if (selectedIconId == iconId) MaterialTheme.colorScheme.primary else Color.Transparent,
-                        shape = CircleShape
+
+    // Remember to add the milestone drawable assets to your res/drawable folder.
+
+    Column {
+        Text("Unlocked", style = MaterialTheme.typography.titleSmall)
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+        ) {
+            items(items = availableIcons, key = { it }) { iconId ->
+                val resId = presetIconMap[iconId]
+                if (resId != null) {
+                    Image(
+                        painter = painterResource(id = resId),
+                        contentDescription = "$iconId icon",
+                        modifier = Modifier
+                            .size(64.dp)
+                            .clip(CircleShape)
+                            .clickable { onIconSelected(iconId) }
+                            .border(
+                                width = if (selectedIconId == iconId) 3.dp else 0.dp,
+                                color = if (selectedIconId == iconId) MaterialTheme.colorScheme.primary else Color.Transparent,
+                                shape = CircleShape
+                            )
                     )
-            ) {
-                Image(
-                    painter = painterResource(id = resId),
-                    contentDescription = "$iconId icon",
-                    modifier = Modifier.fillMaxSize()
-                )
+                }
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+
+        Text("Unlockable", style = MaterialTheme.typography.titleSmall)
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+        ) {
+            // We still loop through the milestoneIcons to know HOW MANY locked icons to show.
+            items(milestoneIcons.entries.toList()) { (iconId, score) ->
+                // Only show an item if the user has NOT unlocked it yet.
+                if (iconId !in unlockedIconIds) {
+
+                    // For every locked icon, display your single, default 'lockedimg'.
+                    Image(
+                        painter = painterResource(id = R.drawable.lockedimg), // <-- YOUR DEFAULT IMAGE
+                        contentDescription = "Locked Icon",
+                        modifier = Modifier
+                            .size(64.dp)
+                            .clip(CircleShape)
+                    )
+                }
             }
         }
     }

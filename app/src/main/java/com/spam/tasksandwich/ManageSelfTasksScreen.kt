@@ -63,7 +63,7 @@ fun AddSelfTaskForm(
 
     // --- Local UI State ---
     var title by rememberSaveable { mutableStateOf("") }
-    var points by rememberSaveable { mutableStateOf("") }
+//    var points by rememberSaveable { mutableStateOf("") }
     val repeatOptions = listOf("Never", "Every Day", "Once a Week", "Once a Month")
     var selectedRepeatOption by rememberSaveable { mutableStateOf(repeatOptions[0]) }
     var isDropdownExpanded by remember { mutableStateOf(false) }
@@ -79,7 +79,7 @@ fun AddSelfTaskForm(
                 snackbarHostState.showSnackbar("Task Saved!")
             }
             title = ""
-            points = ""
+//            points = ""
             selectedRepeatOption = repeatOptions[0]
             viewModel.resetSaveState()
         }
@@ -111,14 +111,14 @@ fun AddSelfTaskForm(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 // Points Field
-                OutlinedTextField(
-                    value = points,
-                    onValueChange = { points = it },
-                    label = { Text("Points (Optional)") },
-                    modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    singleLine = true
-                )
+//                OutlinedTextField(
+//                    value = points,
+//                    onValueChange = { points = it },
+//                    label = { Text("Points (Optional)") },
+//                    modifier = Modifier.fillMaxWidth(),
+//                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+//                    singleLine = true
+//                )
                 Spacer(modifier = Modifier.height(16.dp))
 
                 // Repeat Option Dropdown
@@ -159,7 +159,7 @@ fun AddSelfTaskForm(
                 // Error Message Display
                 if (uiState.error != null) {
                     Text(
-                        text = uiState.error!!,
+                        text = uiState.error,
                         color = MaterialTheme.colorScheme.error,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.padding(bottom = 16.dp)
@@ -169,10 +169,10 @@ fun AddSelfTaskForm(
                 // Save Button
                 Button(
                     onClick = {
-                        viewModel.saveTask(title, points, selectedRepeatOption)
+                        viewModel.saveTask(title, selectedRepeatOption)
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    enabled = !uiState.isLoading
+                    enabled = !uiState.isLoading && title.isNotBlank()
                 ) {
                     Text("Save and Add Another")
                 }
@@ -186,8 +186,6 @@ fun AddSelfTaskForm(
                 ) {
                     Text("Go Back")
                 }
-//                Spacer(modifier = Modifier.height(16.dp))
-
             }
         }
     }

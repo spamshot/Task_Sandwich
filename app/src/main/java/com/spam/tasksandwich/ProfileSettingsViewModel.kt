@@ -59,13 +59,20 @@ class ProfileSettingsViewModel : ViewModel() {
             _uiState.update { it.copy(isLoading = false, error = "User not logged in.") }
             return
         }
-        db.collection("users").document(currentUser.uid).get()
-            .addOnSuccessListener { document ->
-                val profile = document.toObject(UserProfile::class.java)?.copy(uid = document.id)
-                _uiState.update { it.copy(isLoading = false, userProfile = profile) }
-            }
-            .addOnFailureListener { e ->
-                _uiState.update { it.copy(isLoading = false, error = "Failed to load profile: ${e.message}") }
+        // Change from a one-time .get() to a real-time .addSnapshotListener
+        db.collection("users").document(currentUser.uid)
+            .addSnapshotListener { document, error ->
+                if (error != null) {
+                    _uiState.update { it.copy(isLoading = false, error = "Failed to load profile: ${error.message}") }
+                    return@addSnapshotListener
+                }
+
+                if (document != null && document.exists()) {
+                    // This logic is the same, but now it will run automatically
+                    // whenever the user's document changes in the database.
+                    val profile = document.toObject(UserProfile::class.java)?.copy(uid = document.id)
+                    _uiState.update { it.copy(isLoading = false, userProfile = profile) }
+                }
             }
     }
 

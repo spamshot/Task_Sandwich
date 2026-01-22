@@ -73,60 +73,51 @@ class ManageSelfTasksViewModel : ViewModel() {
      * @param pointsStr The point value of the task as a String.
      * @param repeatOption The selected repetition frequency (e.g., "Never", "Every Day").
      */
-    fun saveTask(title: String, pointsStr: String, repeatOption: String) {
-        val currentUser = auth.currentUser
-        if (currentUser == null) {
-            _uiState.update { it.copy(error = "You must be logged in.") }
-            return
-        }
+    fun saveTask(title: String, repeatOption: String) { // <-- REMOVED pointsStr parameter
+        val currentUser = auth.currentUser ?: return
 
-        // --- Input Validation ---
+        // Validation is now simpler
         if (title.isBlank()) {
             _uiState.update { it.copy(error = "Task name cannot be empty.") }
             return
         }
-        val points = pointsStr.ifBlank { "0" }.toIntOrNull()
-        if (points == null || points < 0) {
-            _uiState.update { it.copy(error = "Please enter a valid, non-negative number for points.") }
-            return
-        }
 
-        _uiState.update { it.copy(isLoading = true, error = null) } // Use isLoading for the spinner
+        _uiState.update { it.copy(isLoading = true, error = null) }
         viewModelScope.launch {
             try {
                 val userDoc = db.collection("users").document(currentUser.uid).get().await()
                 val userName = userDoc.getString("name") ?: "Myself"
+
                 val taskData = hashMapOf(
-                    "title" to title, "points" to points, "repeatOption" to repeatOption,
-                    "status" to "assigned", "createdAt" to Timestamp.now(), "isPersonal" to true,
-                    "assignedToUserId" to currentUser.uid, "assignedByUserId" to currentUser.uid,
+                    "title" to title,
+                    "points" to 1, // <-- HARDCODED point value to 1
+                    "repeatOption" to repeatOption,
+                    "status" to "assigned",
+                    "createdAt" to Timestamp.now(),
+                    "isPersonal" to true,
+                    "assignedToUserId" to currentUser.uid,
+                    "assignedByUserId" to currentUser.uid,
                     "assignedByName" to userName
                 )
 
-                // Save to Firestore and get the new document reference
                 val newDocRef = db.collection("tasks").add(taskData).await()
 
-                // Create a local Task object representing what we just saved
                 val newTask = Task(
                     id = newDocRef.id,
                     title = title,
-                    points = points,
+                    points = 1, // Use the hardcoded value here too
                     repeatOption = repeatOption,
                     isPersonal = true,
-                    assignedByName = userName,
-                    // ... other fields can use defaults if not immediately needed by the UI
+                    assignedByName = userName
                 )
 
-                // --- OPTIMISTIC UI UPDATE ---
                 _uiState.update { currentState ->
                     currentState.copy(
                         isLoading = false,
-                        isTaskSaved = true, // Signal to clear the form
-                        // Prepend the new task to the front of the local list
+                        isTaskSaved = true,
                         personalTasks = listOf(newTask) + currentState.personalTasks
                     )
                 }
-
             } catch (e: Exception) {
                 _uiState.update { it.copy(isLoading = false, error = e.message) }
             }

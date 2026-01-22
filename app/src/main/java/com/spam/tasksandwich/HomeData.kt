@@ -17,7 +17,8 @@ data class UserProfile(
     // We can even add the fields we planned for the future here.
     val selectedBackgroundId: String? = null,
     val role: String = "child", // Default role
-    val groupsJoined: List<Map<String, Any>> = emptyList()
+    val groupsJoined: List<Map<String, Any>> = emptyList(),
+    val unlockedIconIds: List<String> = emptyList(),
 
 )
 
