@@ -12,6 +12,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.spam.tasksandwich.IconRepository.AllIconsMap
 
 /**
  * A reusable Card that displays a user's profile information.
@@ -33,17 +34,8 @@ fun UserProfileCard(
     iconId: String,
     modifier: Modifier = Modifier
 ) {
-    val presetIconMap = remember {
-        mapOf(
-            "avatar_1" to R.drawable.carrotdog,
-            "avatar_2" to R.drawable.dallebabyface,
-            "avatar_3" to R.drawable.fglasses,
-            "avatar_4" to R.drawable.firehairguy,
-            "avatar_5" to R.drawable.vgfbhbluehair
-        )
-    }
 
-    val resId = presetIconMap[iconId] ?: R.drawable.carrotdog // Fallback to a default
+    val resId = AllIconsMap[iconId] ?: R.drawable.carrotdog // Fallback to a default
     Card(
         modifier = Modifier
             .fillMaxWidth()

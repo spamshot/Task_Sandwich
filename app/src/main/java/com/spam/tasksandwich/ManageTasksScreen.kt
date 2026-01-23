@@ -45,16 +45,16 @@ fun ManageTasksScreen(
     val tabs = listOf("Assign New", "Manage Assigned")
 
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Manage Tasks") },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Go Back")
-                    }
-                }
-            )
-        }
+//        topBar = {
+//            TopAppBar(
+//                title = { Text("Manage Tasks") },
+//                navigationIcon = {
+//                    IconButton(onClick = onNavigateBack) {
+//                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Go Back")
+//                    }
+//                }
+//            )
+//        }
     ) { paddingValues ->
         Column(modifier = Modifier.padding(paddingValues)) {
             TabRow(selectedTabIndex = selectedTabIndex) {

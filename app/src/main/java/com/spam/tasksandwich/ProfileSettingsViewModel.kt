@@ -35,6 +35,7 @@ data class ProfileSettingsUiState(
     val saveSuccess: Boolean = false,
     val logoutSuccess: Boolean = false,
     val error: String? = null,
+
     val purchaseHistory: List<UserPurchaseLogItem> = emptyList(),
     val tasks: List<Task> = emptyList()
 
@@ -74,6 +75,7 @@ class ProfileSettingsViewModel : ViewModel() {
                     _uiState.update { it.copy(isLoading = false, userProfile = profile) }
                 }
             }
+
     }
 
 

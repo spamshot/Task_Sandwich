@@ -74,22 +74,22 @@ class HomeViewModel : ViewModel(), RefreshesViewModel {
         userDocRef.addSnapshotListener { snapshot, error ->
             if (error != null) {
                 _uiState.update { it.copy(error = "Failed to load user profile.") }
-                userListenerLoaded = true
-                checkCompletion()
+                userListenerLoaded = true; checkCompletion()
                 return@addSnapshotListener
             }
 
             if (snapshot != null && snapshot.exists()) {
                 // 1. Immediately map the user profile data.
-                val user = snapshot.toObject(UserProfile::class.java)
+                var user = snapshot.toObject(UserProfile::class.java)
+                if (user?.role == "super_admin") {
+                    // ...if their role is "super_admin", create a modified copy
+                    // with totalSelfPoints set to 999.
+                    user = user.copy(totalSelfPoints = 999)
+                }
 
-                // 2. Immediately update the UI state with the latest user profile.
-                // This is the critical fix that ensures point changes are reflected instantly.
                 _uiState.update { it.copy(userProfile = user) }
-
                 @Suppress("UNCHECKED_CAST")
                 val roomsData = snapshot.get("groupsJoined") as? List<HashMap<String, String>> ?: emptyList()
-
                 // 3. Kick off the asynchronous work to fetch points for each room.
                 viewModelScope.launch {
                     try {

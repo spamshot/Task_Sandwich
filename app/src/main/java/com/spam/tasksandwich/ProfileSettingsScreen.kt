@@ -92,7 +92,7 @@ fun ProfileSettingsForm(uiState: ProfileSettingsUiState, viewModel: ProfileSetti
     var showLogoutDialog by remember { mutableStateOf(false) }
 
     // This effect populates the form fields once the user's profile is loaded.
-    LaunchedEffect(uiState.userProfile) {
+    LaunchedEffect(uiState.userProfile?.uid) {
         uiState.userProfile?.let {
             name = it.name
             age = it.age?.toString() ?: ""
@@ -151,7 +151,7 @@ fun ProfileSettingsForm(uiState: ProfileSettingsUiState, viewModel: ProfileSetti
                 Text("Choose your Icon", style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(8.dp))
                 IconSelector(
-                    unlockedIconIds = uiState.userProfile?.unlockedIconIds ?: emptyList(),
+                    userProfile = uiState.userProfile, // Pass the full profile
                     selectedIconId = selectedIconId,
                     onIconSelected = { selectedIconId = it }
                 )
@@ -169,7 +169,7 @@ fun ProfileSettingsForm(uiState: ProfileSettingsUiState, viewModel: ProfileSetti
 //                        email = it.email ?: "",
                         pointsInRoom = 0,
                         totalPoints = it.totalPoints,
-                        iconId = it.selectedIconId ?: "avatar_1"
+                        iconId = it.selectedIconId?: "avatar_1"
                     )
                 }
 
@@ -343,33 +343,47 @@ fun TransactionHistoryItem(purchase: UserPurchaseLogItem) {
 
 @Composable
 fun IconSelector(
-    unlockedIconIds: List<String>,
+    // The unlockedIconIds parameter is no longer needed, as we get it from the userProfile
+    userProfile: UserProfile?,
     selectedIconId: String,
     onIconSelected: (String) -> Unit
 ) {
-    // 1. Define all possible icons
-    val defaultIcons = listOf("avatar_1", "avatar_2", "avatar_3", "avatar_4", "avatar_5")
-    val milestoneIcons = mapOf(
-        "avatar_milestone_10" to 10,
-        "avatar_milestone_25" to 25,
-        "avatar_milestone_50" to 50
-    )
+    if (userProfile == null) return // Guard against null profile
 
-    // 2. Combine the lists for display
-    val availableIcons = (defaultIcons + unlockedIconIds).distinct()
+    // 1. Get the lists and maps from our single source of truth, the IconRepository.
+    val defaultIcons = IconRepository.DefaultIconIds
+    val milestoneIcons = IconRepository.MilestoneIconsMap
+    val allIconsMap = IconRepository.AllIconsMap
+    val roleIconsMap = IconRepository.RoleIconsMap
 
-    val presetIconMap = remember {
-        mapOf(
-            "avatar_1" to R.drawable.carrotdog, "avatar_2" to R.drawable.dallebabyface,
-            "avatar_3" to R.drawable.fglasses, "avatar_4" to R.drawable.firehairguy,
-            "avatar_5" to R.drawable.vgfbhbluehair,
-            "avatar_milestone_10" to R.drawable.bluehairguy,
-            "avatar_milestone_25" to R.drawable.fzombie,
-            "avatar_milestone_50" to R.drawable.guywithglasses
-        )
+
+
+    // --- NEW LOGIC TO BUILD THE LIST ---
+    // 2. Start with a mutable list to dynamically build the available icons.
+    val availableIcons = mutableListOf<String>()
+    val specialIcons = roleIconsMap[userProfile.role]
+    if (specialIcons != null) {
+        // If a list is found, add all of its icons.
+        availableIcons.addAll(specialIcons)
     }
 
-    // Remember to add the milestone drawable assets to your res/drawable folder.
+    // 3. If the user has the "super_admin" role, add the special admin icon first.
+//    if (userProfile.role == "super_admin") {
+//        availableIcons.add(IconRepository.ADMIN_ICON_1)
+//
+//    }
+
+    // 4. Add the default icons.
+    availableIcons.addAll(defaultIcons)
+
+    // 5. Add the icons the user has unlocked through achievements.
+    availableIcons.addAll(userProfile.unlockedIconIds)
+
+    // Use .distinct() to create the final list, removing any duplicates.
+    val finalAvailableIcons = availableIcons.distinct()
+    // --- END OF NEW LOGIC ---
+
+    val lockedIcons = milestoneIcons.keys.filter { it !in userProfile.unlockedIconIds }
 
     Column {
         Text("Unlocked", style = MaterialTheme.typography.titleSmall)
@@ -377,8 +391,9 @@ fun IconSelector(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
         ) {
-            items(items = availableIcons, key = { it }) { iconId ->
-                val resId = presetIconMap[iconId]
+            // Use the new, dynamically built list.
+            items(items = finalAvailableIcons, key = { it }) { iconId ->
+                val resId = allIconsMap[iconId]
                 if (resId != null) {
                     Image(
                         painter = painterResource(id = resId),
@@ -397,22 +412,17 @@ fun IconSelector(
             }
         }
 
-        Spacer(Modifier.height(16.dp))
-
-        Text("Unlockable", style = MaterialTheme.typography.titleSmall)
-        LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
-        ) {
-            // We still loop through the milestoneIcons to know HOW MANY locked icons to show.
-            items(milestoneIcons.entries.toList()) { (iconId, score) ->
-                // Only show an item if the user has NOT unlocked it yet.
-                if (iconId !in unlockedIconIds) {
-
-                    // For every locked icon, display your single, default 'lockedimg'.
+        if (lockedIcons.isNotEmpty()) {
+            Spacer(Modifier.height(16.dp)) // Changed from 4.dp for better spacing
+            Text("Unlockable", style = MaterialTheme.typography.titleSmall)
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+            ) {
+                items(lockedIcons) { iconId ->
                     Image(
-                        painter = painterResource(id = R.drawable.lockedimg), // <-- YOUR DEFAULT IMAGE
-                        contentDescription = "Locked Icon",
+                        painter = painterResource(id = R.drawable.lockedimg),
+                        contentDescription = "Locked Icon for $iconId",
                         modifier = Modifier
                             .size(64.dp)
                             .clip(CircleShape)
