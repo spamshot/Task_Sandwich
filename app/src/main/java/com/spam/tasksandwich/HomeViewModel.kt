@@ -16,6 +16,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import com.spam.tasksandwich.IconRepository
 
 
 // Note: All data classes (UserProfile, Task, UserRoom) should be in HomeData.kt
@@ -306,24 +307,14 @@ class HomeViewModel : ViewModel(), RefreshesViewModel {
                         // 2. Calculate what the new point total WILL be.
                         val newTotalSelfPoints = userProfile.totalSelfPoints + task.points
 
-                        // 3. Define our milestones.
-                        // We map the required score to the icon ID that gets unlocked.
-                        val milestones = mapOf(
-                            10 to "avatar_milestone_10",
-                            25 to "avatar_milestone_25",
-                            50 to "avatar_milestone_50"
-                        )
 
                         // 4. Check if any new milestones have been crossed.
-                        milestones.forEach { (score, iconId) ->
-                            // If the new score is high enough AND the user doesn't already have the icon...
+                        IconRepository.MilestoneIconsMap.forEach { (iconId, score) ->
                             if (newTotalSelfPoints >= score && !userProfile.unlockedIconIds.contains(iconId)) {
-                                // ...add the operation to our batch to unlock it!
                                 batch.update(userRef, "unlockedIconIds", FieldValue.arrayUnion(iconId))
                             }
                         }
                     }
-                    // --- END OF NEW LOGIC ---
 
                     // Increment 'totalSelfPoints' (this is the original logic)
                     batch.update(userRef, "totalSelfPoints", FieldValue.increment(task.points.toLong()))

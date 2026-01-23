@@ -37,14 +37,8 @@ object IconRepository {
         "avatar_milestone_999" to R.drawable.thorimg,
 
 
-
-
-
-
-
-
         //Admin only
-        ADMIN_ICON_1 to R.drawable.admin6000,
+        ADMIN_ICON_1 to R.drawable.admin6000, //todo Dev only, 2 can be moved to teacher not admin6000 and spam
         ADMIN_ICON_2 to R.drawable.adminimg,
         ADMIN_ICON_3 to R.drawable.spamimg,
         ADMIN_ICON_4 to R.drawable.adminadmin,
@@ -62,7 +56,18 @@ object IconRepository {
     val MilestoneIconsMap = mapOf(
         "avatar_milestone_10" to 10,
         "avatar_milestone_25" to 25,
-        "avatar_milestone_50" to 50
+        "avatar_milestone_35" to 35,
+        "avatar_milestone_50" to 50,
+        "avatar_milestone_100" to 100,
+        "avatar_milestone_122" to 122,
+        "avatar_milestone_250" to 250,
+        "avatar_milestone_310" to 310,
+        "avatar_milestone_465" to 465,
+        "avatar_milestone_666" to 666,
+        "avatar_milestone_999" to 999,
+
+
+
     )
 
     val RoleIconsMap = mapOf(
