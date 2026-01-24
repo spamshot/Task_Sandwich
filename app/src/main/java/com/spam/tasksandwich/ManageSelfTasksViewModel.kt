@@ -45,7 +45,7 @@ class ManageSelfTasksViewModel : ViewModel() {
 
     init {
         viewModelScope.launch {
-            delay(800)
+//            delay(800)
             listenForPersonalTasks()
         }
     }

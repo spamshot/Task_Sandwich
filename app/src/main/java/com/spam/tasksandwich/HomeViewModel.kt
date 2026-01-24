@@ -120,7 +120,9 @@ class HomeViewModel : ViewModel(), RefreshesViewModel {
                         val roomsListWithPoints = roomJobs.awaitAll()
 
                         // 4. Update the UI state AGAIN, this time with the fully enriched room data.
+                        userRooms = roomsListWithPoints
                         _uiState.update { it.copy(rooms = roomsListWithPoints) }
+                        updateGroupedTasks()
 
                     } catch (e: Exception) {
                         _uiState.update { it.copy(error = "Error loading room points.") }
@@ -149,18 +151,10 @@ class HomeViewModel : ViewModel(), RefreshesViewModel {
                 return@addSnapshotListener
             }
             if (snapshot != null) {
-                val tasks = snapshot.documents.mapNotNull { doc ->
+                userTasks = snapshot.documents.mapNotNull { doc ->
                     doc.toObject(Task::class.java)?.copy(id = doc.id)
                 }
-                _uiState.update { currentState ->
-                    val rooms = currentState.rooms
-                    val grouped = tasks.groupBy { task ->
-                        val room = rooms.find { it.groupId == task.groupId }
-                        val roomName = room?.groupName ?: "Personal Tasks"
-                        "$roomName - from ${task.assignedByName}"
-                    }
-                    currentState.copy(groupedTasks = grouped)
-                }
+                updateGroupedTasks()
             }
             tasksListenerLoaded = true
             checkCompletion()
