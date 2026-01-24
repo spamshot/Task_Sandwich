@@ -7,6 +7,7 @@ import com.google.firebase.Timestamp
 import com.google.firebase.auth.auth
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.firestore
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -43,7 +44,10 @@ class ManageSelfTasksViewModel : ViewModel() {
     val uiState = _uiState.asStateFlow()
 
     init {
-        listenForPersonalTasks()
+        viewModelScope.launch {
+            delay(800)
+            listenForPersonalTasks()
+        }
     }
 
     private fun listenForPersonalTasks() {
@@ -51,16 +55,36 @@ class ManageSelfTasksViewModel : ViewModel() {
             _uiState.update { it.copy(isLoading = false) }
             return
         }
+
+        // 1. Broaden the query: Get ALL personal tasks created by the user,
+        //    regardless of their 'status'.
+        _uiState.update { it.copy(isLoading = true) }
         db.collection("tasks")
-            .whereEqualTo("assignedToUserId", currentUser.uid)
+            .whereEqualTo("assignedByUserId", currentUser.uid)
             .whereEqualTo("isPersonal", true)
             .orderBy("createdAt", Query.Direction.DESCENDING)
-            .addSnapshotListener { snapshot, _ ->
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    _uiState.update { it.copy(isLoading = false, error = "Loading DB") }
+                    return@addSnapshotListener
+                }
+
                 if (snapshot != null) {
-                    val tasks = snapshot.documents.mapNotNull { doc ->
+                    // 2. Map all the documents from Firestore.
+                    val allPersonalTasks = snapshot.documents.mapNotNull { doc ->
                         doc.toObject(Task::class.java)?.copy(id = doc.id)
                     }
-                    _uiState.update { it.copy(isLoading = false, personalTasks = tasks) }
+
+                    // 3. Apply our smart filter on the client side.
+                    //    A task should be shown in the management list IF:
+                    //    a) It is a repeating task (it should always be manageable).
+                    //    b) OR its status is still "assigned".
+                    val filteredTasks = allPersonalTasks.filter { task ->
+                        task.repeatOption != "Never" || task.status == "assigned"
+                    }
+
+                    // 4. Update the UI with only the filtered list.
+                    _uiState.update { it.copy(isLoading = false, personalTasks = filteredTasks) }
                 }
             }
     }

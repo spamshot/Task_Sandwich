@@ -20,7 +20,6 @@ import java.util.UUID
 import java.util.Calendar
 
 // Data class for the auto-assign templates shown in the UI
-// Data class for the auto-assign templates shown in the UI
 data class AutoAssignTaskTemplate(
     val id: String,
     val title: String,

@@ -39,6 +39,7 @@ data class Task(
     val assignedByUserId: String = "",
     val status: String = "assigned",
     val isPersonal: Boolean = false,
+    val isArchived: Boolean = false,
     val createdAt: Timestamp? = null
 )
 

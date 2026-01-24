@@ -13,8 +13,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -32,6 +30,13 @@ import com.google.firebase.Timestamp
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Locale
+
+import android.widget.Toast
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.platform.LocalClipboardManager
 
 
 
@@ -274,6 +279,9 @@ fun TaskLogItem(task: Task, onLongPress: () -> Unit) {
 @Composable
 fun TransactionHistoryItem(purchase: UserPurchaseLogItem) {
 
+    val clipboardManager = LocalClipboardManager.current
+    val context = LocalContext.current
+
     val pointsText: String
     val pointsColor: Color
 
@@ -304,12 +312,34 @@ fun TransactionHistoryItem(purchase: UserPurchaseLogItem) {
                 fontWeight = FontWeight.Bold
             )
             if (purchase.mysteryText.isNotBlank() && purchase.status == "completed") {
-                Text(
-                    text = purchase.mysteryText,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(top = 4.dp)
+                ) {
+                    Text(
+                        text = purchase.mysteryText,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    // The new Copy Icon Button
+                    IconButton(
+                        modifier = Modifier.size(20.dp), // Make the button small and unobtrusive
+                        onClick = {
+                            // 1. Copy the text to the clipboard
+                            clipboardManager.setText(AnnotatedString(purchase.mysteryText))
+                            // 2. Show a confirmation message to the user
+                            Toast.makeText(context, "Copied!", Toast.LENGTH_SHORT).show()
+                        }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Share,
+                            contentDescription = "Copy Mystery Text",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
             }
             purchase.purchasedAt?.let {
                 Text(

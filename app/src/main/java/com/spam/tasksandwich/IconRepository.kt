@@ -66,8 +66,6 @@ object IconRepository {
         "avatar_milestone_666" to 666,
         "avatar_milestone_999" to 999,
 
-
-
     )
 
     val RoleIconsMap = mapOf(

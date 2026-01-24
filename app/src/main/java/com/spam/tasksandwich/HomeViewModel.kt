@@ -281,6 +281,7 @@ class HomeViewModel : ViewModel(), RefreshesViewModel {
 
     /**
      * Marks a given task as complete and atomically increments the correct point totals.
+     * If the task is a personal task, it also checks for and applies any milestone unlocks.
      * This function uses a batch write to ensure all database operations succeed or fail together.
      *
      * @param task The Task object to be marked as complete.
@@ -292,6 +293,7 @@ class HomeViewModel : ViewModel(), RefreshesViewModel {
                 val batch = db.batch()
                 val taskRef = db.collection("tasks").document(task.id)
 
+                // Update the task's status and add a timestamp for when it was handled.
                 batch.update(taskRef, "status", "completed", "handledAt", Timestamp.now())
 
                 val userRef = db.collection("users").document(currentUser.uid)
@@ -299,29 +301,32 @@ class HomeViewModel : ViewModel(), RefreshesViewModel {
                 if (task.groupId.isNullOrEmpty()) {
                     // It's a personal task.
 
-                    // --- NEW ACHIEVEMENT LOGIC ---
-
-                    // 1. Get the user's current profile from our state to know their current points.
+                    // Get the user's current profile from our state to know their current points.
                     val userProfile = _uiState.value.userProfile
                     if (userProfile != null) {
-                        // 2. Calculate what the new point total WILL be.
+                        // Calculate what the new point total WILL be.
                         val newTotalSelfPoints = userProfile.totalSelfPoints + task.points
 
-
-                        // 4. Check if any new milestones have been crossed.
+                        // Check if any new milestones have been crossed by comparing against the IconRepository.
                         IconRepository.MilestoneIconsMap.forEach { (iconId, score) ->
+                            // If the new score is high enough AND the user doesn't already have the icon...
                             if (newTotalSelfPoints >= score && !userProfile.unlockedIconIds.contains(iconId)) {
+                                // ...add the operation to our batch to unlock it!
                                 batch.update(userRef, "unlockedIconIds", FieldValue.arrayUnion(iconId))
                             }
                         }
                     }
 
-                    // Increment 'totalSelfPoints' (this is the original logic)
+                    // Increment 'totalSelfPoints'.
                     batch.update(userRef, "totalSelfPoints", FieldValue.increment(task.points.toLong()))
 
                 } else {
-                    // It's a group task. This logic is unchanged.
+                    // It's a group task.
+
+                    // Increment the user's global 'totalPoints' for group activities.
                     batch.update(userRef, "totalPoints", FieldValue.increment(task.points.toLong()))
+
+                    // Also increment the room-specific 'totalPointsInGroup' for the leaderboard.
                     task.groupId.let { roomId ->
                         if (roomId.isNotEmpty()) {
                             val memberRef = db.collection("groups").document(roomId)
@@ -331,6 +336,7 @@ class HomeViewModel : ViewModel(), RefreshesViewModel {
                     }
                 }
 
+                // Commit all prepared operations to the database at once.
                 batch.commit().await()
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = "Could not complete task: ${e.message}") }
