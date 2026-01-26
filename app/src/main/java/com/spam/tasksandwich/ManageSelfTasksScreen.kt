@@ -216,7 +216,7 @@ fun ManageSelfTasksList(uiState: ManageSelfTasksUiState, viewModel: ManageSelfTa
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
     } else if (uiState.personalTasks.isEmpty()) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("You have not created any personal tasks yet.")
+            Text("you can only manage new or repeating tasks.")
         }
     } else {
         LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {

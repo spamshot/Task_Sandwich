@@ -14,16 +14,16 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextButton
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.KeyboardType
 
 data class NavDrawerItem(
     val route: String,
     val label: String,
-    val icon: ImageVector
+    val icon: Any // Can be ImageVector or Int resource ID
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -137,10 +137,10 @@ fun AppShell(
     val drawerItems = listOf(
         NavDrawerItem(Screen.Home.route, "Home", Icons.Default.Home),
 
-        NavDrawerItem(Screen.ManageSelfTasks.route, "Manage Self Tasks", Icons.Default.Person),
+        NavDrawerItem(Screen.ManageSelfTasks.route, "Manage Self Tasks", R.drawable.person_raised_hand_24px),
 
-        NavDrawerItem(Screen.CreateRoom.route, "Create Room", Icons.Default.Check),
-        NavDrawerItem(Screen.JoinRoom.route, "Join Room", Icons.Default.Home),
+        NavDrawerItem(Screen.CreateRoom.route, "Create Room", R.drawable.groups_24px),
+        NavDrawerItem(Screen.JoinRoom.route, "Join Room", R.drawable.group_add_24px),
         NavDrawerItem(Screen.ProfileSettings.route, "Profile Settings", Icons.Default.Settings)
     )
 
@@ -179,7 +179,13 @@ fun AppShell(
                     // ------------------
 
                     NavigationDrawerItem(
-                        icon = { Icon(item.icon, contentDescription = null) },
+                        icon = {
+                            when (val icon = item.icon) {
+                                is ImageVector -> Icon(icon, contentDescription = null)
+                                is Int -> Icon(painterResource(id = icon), contentDescription = null)
+                                else -> {}
+                            }
+                        },
                         label = { Text(item.label) },
                         selected = currentRoute == item.route,
                         onClick = {

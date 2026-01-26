@@ -32,8 +32,6 @@ import java.text.SimpleDateFormat
 import java.util.Locale
 
 import android.widget.Toast
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -232,13 +230,29 @@ fun TaskHistoryList(
     viewModel: ProfileSettingsViewModel,
     onNavigateToEdit: (String) -> Unit
 ) {
+    //todo Empty History goes here
+
     var taskToAction by remember { mutableStateOf<Task?>(null) }
 
     Scaffold(
     ) { paddingValues ->
+
+        if (uiState.tasks.isEmpty()){
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(
+                    "No history found.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
         if (uiState.isLoading) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
         } else {
+
             LazyColumn(
                 modifier = Modifier.fillMaxSize().padding(paddingValues),
                 contentPadding = PaddingValues(16.dp),
@@ -334,10 +348,11 @@ fun TransactionHistoryItem(purchase: UserPurchaseLogItem) {
                         }
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Share,
+                            painter = painterResource(id = R.drawable.content_copy_24px),
                             contentDescription = "Copy Mystery Text",
                             tint = MaterialTheme.colorScheme.primary
                         )
+
                     }
                 }
             }

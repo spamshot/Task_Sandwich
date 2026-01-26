@@ -183,7 +183,7 @@ fun HomeDashboard(
                     .padding(top = 32.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text("You have no pending tasks! \n Add task from the top left", style = MaterialTheme.typography.bodyLarge)
+                Text("You have no pending tasks! \n Lets add tasks from the top left", style = MaterialTheme.typography.bodyLarge)
             }
         } else {
             TaskList(groupedTasks = uiState.groupedTasks, onCompleteTask = onCompleteTask)
@@ -410,7 +410,12 @@ private fun formatDuration(now: Long, future: Long): String {
 }
 
 
+//-Admin
 //fake3@gmail.com
+//Password123!!!
+
+//New User
+//fake88@gmail.com
 //Password123!!!
 
 // C:\Users\kylan\AndroidStudioProjects\TaskSandwich

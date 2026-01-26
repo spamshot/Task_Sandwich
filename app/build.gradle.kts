@@ -23,6 +23,7 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
+            isShrinkResources = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -61,6 +62,7 @@ dependencies {
     implementation(libs.androidx.compose.ui.text)
     implementation(libs.firebase.appcheck.debug)
     implementation(libs.androidx.compose.foundation)
+    implementation(libs.play.services.ads.api)
 //    implementation(libs.firebase.functions.ktx)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
@@ -82,6 +84,9 @@ dependencies {
     implementation("com.google.firebase:firebase-functions:22.1.0")
     implementation("com.google.firebase:firebase-appcheck-playintegrity")
     implementation("com.google.firebase:firebase-analytics")
+
+    //Icons
+    implementation("androidx.compose.material:material-icons-extended:1.7.8")
 
 //https://firebase.google.com/support/release-notes/android#bom_v32-5-0
 

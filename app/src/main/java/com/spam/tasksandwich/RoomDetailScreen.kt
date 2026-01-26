@@ -333,7 +333,8 @@ fun TopTasksTab(uiState: RoomDetailUiState) {
     val completedTasks = topTasks
         .filter { it.pendingCount == 0 && it.completedAt != null }
         .sortedByDescending { it.completedAt }
-        .take(7)
+        .take(10)
+    //Take is the number of items we are showing
 
     val pendingTasks = topTasks
         .filter { it.pendingCount > 0 && it.createdAt != null }
@@ -350,30 +351,31 @@ fun TopTasksTab(uiState: RoomDetailUiState) {
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            item {
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column {
-                        Text(
-                            "In Progress",
-                            style = MaterialTheme.typography.titleMedium,
-                            modifier = Modifier.padding(12.dp)
-                        )
-                        HorizontalDivider()
-                        if (pendingTasks.isEmpty()) {
-                            Box(Modifier.padding(12.dp).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                                Text("None")
-                            }
-                        } else {
-                            Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                                pendingTasks.forEach { task ->
-                                    CompactTaskItem(task = task, isAdmin = uiState.isAdmin)
-                                    HorizontalDivider()
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+            //Don't really need but saving the code
+//            item {
+//                Card(modifier = Modifier.fillMaxWidth()) {
+//                    Column {
+//                        Text(
+//                            "In Progress",
+//                            style = MaterialTheme.typography.titleMedium,
+//                            modifier = Modifier.padding(12.dp)
+//                        )
+//                        HorizontalDivider()
+//                        if (pendingTasks.isEmpty()) {
+//                            Box(Modifier.padding(12.dp).fillMaxWidth(), contentAlignment = Alignment.Center) {
+//                                Text("None")
+//                            }
+//                        } else {
+//                            Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+//                                pendingTasks.forEach { task ->
+//                                    CompactTaskItem(task = task, isAdmin = uiState.isAdmin)
+//                                    HorizontalDivider()
+//                                }
+//                            }
+//                        }
+//                    }
+//                }
+//            }
 
             item {
                 Card(modifier = Modifier.fillMaxWidth()) {

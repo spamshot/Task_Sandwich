@@ -17,7 +17,7 @@ import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import com.spam.tasksandwich.IconRepository
-
+import java.util.Calendar // Added for date calculation
 
 // Note: All data classes (UserProfile, Task, UserRoom) should be in HomeData.kt
 // and imported at the top of this file.
@@ -83,8 +83,6 @@ class HomeViewModel : ViewModel(), RefreshesViewModel {
                 // 1. Immediately map the user profile data.
                 var user = snapshot.toObject(UserProfile::class.java)
                 if (user?.role == "super_admin") {
-                    // ...if their role is "super_admin", create a modified copy
-                    // with totalSelfPoints set to 999.
                     user = user.copy(totalSelfPoints = 999)
                 }
 
@@ -127,22 +125,23 @@ class HomeViewModel : ViewModel(), RefreshesViewModel {
                     } catch (e: Exception) {
                         _uiState.update { it.copy(error = "Error loading room points.") }
                     } finally {
-                        // This block is guaranteed to run, ensuring the listener is marked as "loaded".
                         userListenerLoaded = true
                         checkCompletion()
                     }
                 }
             } else {
-                // If the user document doesn't exist, we still count this listener as "loaded".
                 userListenerLoaded = true
                 checkCompletion()
             }
         }
 
-        // Listener 2: Fetches tasks assigned to the current user.
+        // ====================================================================================
+        // Listener 2: Fetches tasks assigned to the current user (WITH FILTERING)
+        // ====================================================================================
         val tasksQuery = db.collection("tasks")
             .whereEqualTo("assignedToUserId", currentUser.uid)
             .whereEqualTo("status", "assigned")
+
         tasksQuery.addSnapshotListener { snapshot, error ->
             if (error != null) {
                 _uiState.update { it.copy(error = "Failed to load tasks.") }
@@ -151,9 +150,36 @@ class HomeViewModel : ViewModel(), RefreshesViewModel {
                 return@addSnapshotListener
             }
             if (snapshot != null) {
-                userTasks = snapshot.documents.mapNotNull { doc ->
+                val allTasks = snapshot.documents.mapNotNull { doc ->
                     doc.toObject(Task::class.java)?.copy(id = doc.id)
                 }
+
+                // --- NEW FILTERING LOGIC ---
+                // Calculate Midnight Tomorrow (The start of the next day)
+                val cal = Calendar.getInstance()
+                cal.add(Calendar.DAY_OF_YEAR, 1)
+                cal.set(Calendar.HOUR_OF_DAY, 0)
+                cal.set(Calendar.MINUTE, 0)
+                cal.set(Calendar.SECOND, 0)
+                cal.set(Calendar.MILLISECOND, 0)
+                val tomorrowMidnight = cal.time
+
+                userTasks = allTasks.filter { task ->
+                    val due = task.dueDate?.toDate()
+
+                    // Rule 1: Always show tasks that don't repeat (Expires In tasks).
+                    // We want users to see "Due in 3 days" immediately.
+                    if (task.repeatOption == "Never" || task.repeatOption == null) {
+                        return@filter true
+                    }
+
+                    // Rule 2: If it IS a repeating task, only show it if:
+                    // A. It has no date (fallback)
+                    // B. It is due Today or in the Past.
+                    // C. HIDE IT if it is due Tomorrow or Later.
+                    due == null || due.before(tomorrowMidnight)
+                }
+
                 updateGroupedTasks()
             }
             tasksListenerLoaded = true
@@ -165,7 +191,7 @@ class HomeViewModel : ViewModel(), RefreshesViewModel {
         val grouped = userTasks.groupBy { task ->
             val room = userRooms.find { it.groupId == task.groupId }
             val roomName = room?.groupName ?: "Personal Tasks"
-            "$roomName - from ${task.assignedByName}"
+            "$roomName - ${task.assignedByName}"
         }
         _uiState.update { it.copy(groupedTasks = grouped) }
     }
@@ -177,17 +203,13 @@ class HomeViewModel : ViewModel(), RefreshesViewModel {
     fun createRoom(roomName: String) {
         val currentUser = auth.currentUser ?: return
 
-        // 1. Block UI immediately
         _uiState.update { it.copy(isLoading = true) }
 
         viewModelScope.launch {
             try {
                 // =================================================================
-                // SPAM PROTECTION: The "Profile-First" Strategy
+                // SPAM PROTECTION
                 // =================================================================
-                // 1. Fetch the user's profile to see what rooms they have joined.
-                // This is safer than querying the 'groups' collection directly,
-                // which might be blocked by security rules.
                 val userDoc = db.collection("users").document(currentUser.uid)
                     .get(com.google.firebase.firestore.Source.SERVER)
                     .await()
@@ -195,13 +217,8 @@ class HomeViewModel : ViewModel(), RefreshesViewModel {
                 @Suppress("UNCHECKED_CAST")
                 val groupsJoined = userDoc.get("groupsJoined") as? List<HashMap<String, String>> ?: emptyList()
 
-                // Optimization: If you haven't joined 4 rooms, you definitely don't OWN 4 rooms.
                 if (groupsJoined.size >= 4) {
-
-                    // 2. We need to check if you are the ADMIN of these rooms.
                     var ownedCount = 0
-
-                    // Check the rooms one by one (or in parallel)
                     val checkJobs = groupsJoined.map { map ->
                         async {
                             val groupId = map["groupId"] ?: ""
@@ -214,10 +231,7 @@ class HomeViewModel : ViewModel(), RefreshesViewModel {
                             return@async 0
                         }
                     }
-
                     ownedCount = checkJobs.awaitAll().sum()
-
-                    Log.d("RoomLimit", "User has joined ${groupsJoined.size} rooms and owns $ownedCount.")
 
                     if (ownedCount >= 4) {
                         _uiState.update {
@@ -231,7 +245,6 @@ class HomeViewModel : ViewModel(), RefreshesViewModel {
                 }
                 // =================================================================
 
-                // ... Proceed to Create Room ...
                 val newRoomRef = db.collection("groups").document()
                 val joinCode = (100000..999999).random().toString()
 
@@ -273,13 +286,6 @@ class HomeViewModel : ViewModel(), RefreshesViewModel {
         _uiState.update { it.copy(createdRoomId = null) }
     }
 
-    /**
-     * Marks a given task as complete and atomically increments the correct point totals.
-     * If the task is a personal task, it also checks for and applies any milestone unlocks.
-     * This function uses a batch write to ensure all database operations succeed or fail together.
-     *
-     * @param task The Task object to be marked as complete.
-     */
     fun markTaskComplete(task: Task) {
         val currentUser = auth.currentUser ?: return
         viewModelScope.launch {
@@ -287,40 +293,23 @@ class HomeViewModel : ViewModel(), RefreshesViewModel {
                 val batch = db.batch()
                 val taskRef = db.collection("tasks").document(task.id)
 
-                // Update the task's status and add a timestamp for when it was handled.
                 batch.update(taskRef, "status", "completed", "handledAt", Timestamp.now())
 
                 val userRef = db.collection("users").document(currentUser.uid)
 
                 if (task.groupId.isNullOrEmpty()) {
-                    // It's a personal task.
-
-                    // Get the user's current profile from our state to know their current points.
                     val userProfile = _uiState.value.userProfile
                     if (userProfile != null) {
-                        // Calculate what the new point total WILL be.
                         val newTotalSelfPoints = userProfile.totalSelfPoints + task.points
-
-                        // Check if any new milestones have been crossed by comparing against the IconRepository.
                         IconRepository.MilestoneIconsMap.forEach { (iconId, score) ->
-                            // If the new score is high enough AND the user doesn't already have the icon...
                             if (newTotalSelfPoints >= score && !userProfile.unlockedIconIds.contains(iconId)) {
-                                // ...add the operation to our batch to unlock it!
                                 batch.update(userRef, "unlockedIconIds", FieldValue.arrayUnion(iconId))
                             }
                         }
                     }
-
-                    // Increment 'totalSelfPoints'.
                     batch.update(userRef, "totalSelfPoints", FieldValue.increment(task.points.toLong()))
-
                 } else {
-                    // It's a group task.
-
-                    // Increment the user's global 'totalPoints' for group activities.
                     batch.update(userRef, "totalPoints", FieldValue.increment(task.points.toLong()))
-
-                    // Also increment the room-specific 'totalPointsInGroup' for the leaderboard.
                     task.groupId.let { roomId ->
                         if (roomId.isNotEmpty()) {
                             val memberRef = db.collection("groups").document(roomId)
@@ -329,8 +318,6 @@ class HomeViewModel : ViewModel(), RefreshesViewModel {
                         }
                     }
                 }
-
-                // Commit all prepared operations to the database at once.
                 batch.commit().await()
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = "Could not complete task: ${e.message}") }
@@ -351,33 +338,17 @@ class HomeViewModel : ViewModel(), RefreshesViewModel {
         viewModelScope.launch {
             try {
                 if (room.isAdmin) {
-                    // =================================================================
-                    // 1. ADMIN DELETE LOGIC (Cloud Function with Manual Auth Fix)
-                    // =================================================================
-//                    Log.d("DeleteRoom", "Preparing to delete room: ${room.groupId}")
-                    // A. Force Token Refresh
                     val tokenResult = currentUser.getIdToken(true).await()
                     val rawToken = tokenResult.token
+                    val data = hashMapOf("groupId" to room.groupId, "debugToken" to rawToken)
 
-                    // B. Prepare Data with Manual Debug Token
-                    // This bypasses the "You must be logged in" error if headers are stripped
-                    val data = hashMapOf(
-                        "groupId" to room.groupId,
-                        "debugToken" to rawToken
-                    )
-
-                    // C. Call Function
                     functions.getHttpsCallable("deleteGroup")
                         .call(data)
                         .await()
 
                     Log.d("DeleteRoom", "Success!")
-                    // The Firestore listeners will automatically remove the room from the UI
 
                 } else {
-                    // =================================================================
-                    // 2. MEMBER LEAVE LOGIC (Firestore Transaction)
-                    // =================================================================
                     Log.d("LeaveRoom", "Leaving room: ${room.groupId}")
 
                     val userRef = db.collection("users").document(currentUser.uid)
@@ -404,11 +375,8 @@ class HomeViewModel : ViewModel(), RefreshesViewModel {
                     _uiState.update { it.copy(error = "Failed: ${e.message}") }
                 }
             }finally {
-                // 2. ALWAYS clear the ghost state when done (or if failed)
-                // This ensures the card becomes clickable again if the operation failed.
                 _uiState.update { it.copy(roomBeingDeletedId = null) }
             }
         }
     }
-
 }

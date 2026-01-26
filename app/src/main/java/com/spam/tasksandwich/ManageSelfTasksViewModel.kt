@@ -7,26 +7,21 @@ import com.google.firebase.Timestamp
 import com.google.firebase.auth.auth
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.firestore
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
-
-
+import java.util.Calendar // Required for date calculation
 
 /**
  * Represents the complete state of the AddSelfTaskScreen UI.
- * @param isLoading True if a save operation is in progress.
- * @param error A string containing an error message if an operation failed.
- * @param saveResult The result of the last save operation, used to trigger UI events.
  */
 data class ManageSelfTasksUiState(
     val isLoading: Boolean = false,
     val error: String? = null,
     val personalTasks: List<Task> = emptyList(),
-    val isTaskSaved: Boolean = false // Use a simple boolean
+    val isTaskSaved: Boolean = false
 )
 
 /**
@@ -45,7 +40,6 @@ class ManageSelfTasksViewModel : ViewModel() {
 
     init {
         viewModelScope.launch {
-//            delay(800)
             listenForPersonalTasks()
         }
     }
@@ -56,9 +50,9 @@ class ManageSelfTasksViewModel : ViewModel() {
             return
         }
 
-        // 1. Broaden the query: Get ALL personal tasks created by the user,
-        //    regardless of their 'status'.
         _uiState.update { it.copy(isLoading = true) }
+
+        // 1. Query: Get all personal tasks created by the user
         db.collection("tasks")
             .whereEqualTo("assignedByUserId", currentUser.uid)
             .whereEqualTo("isPersonal", true)
@@ -70,20 +64,42 @@ class ManageSelfTasksViewModel : ViewModel() {
                 }
 
                 if (snapshot != null) {
-                    // 2. Map all the documents from Firestore.
+                    // 2. Map documents
                     val allPersonalTasks = snapshot.documents.mapNotNull { doc ->
                         doc.toObject(Task::class.java)?.copy(id = doc.id)
                     }
 
-                    // 3. Apply our smart filter on the client side.
-                    //    A task should be shown in the management list IF:
-                    //    a) It is a repeating task (it should always be manageable).
-                    //    b) OR its status is still "assigned".
+                    // 3. FILTERING LOGIC (Same as HomeViewModel)
+                    // Calculate "Midnight Tomorrow" to hide future tasks
+                    val cal = Calendar.getInstance()
+                    cal.add(Calendar.DAY_OF_YEAR, 1)
+                    cal.set(Calendar.HOUR_OF_DAY, 0)
+                    cal.set(Calendar.MINUTE, 0)
+                    cal.set(Calendar.SECOND, 0)
+                    cal.set(Calendar.MILLISECOND, 0)
+                    val tomorrowMidnight = cal.time
+
                     val filteredTasks = allPersonalTasks.filter { task ->
-                        task.repeatOption != "Never" || task.status == "assigned"
+                        val due = task.dueDate?.toDate()
+
+                        // Check 1: One-Time Task?
+                        // If it's "Never" repeating, simply check if it's assigned.
+                        // (We show one-time tasks immediately even if due in future, so you can see "3 days left")
+                        if (task.repeatOption == "Never" || task.repeatOption == null) {
+                            return@filter task.status == "assigned"
+                        }
+
+                        // Check 2: Repeating Task?
+                        // Only show if due Today (or in the past).
+                        // Hide if due Tomorrow or Later.
+                        val isDueTodayOrPast = due == null || due.before(tomorrowMidnight)
+
+                        // Also ensure we only show the 'assigned' version (not the old completed one)
+                        // The Cloud Function creates the new one as "assigned".
+                        task.status == "assigned" && isDueTodayOrPast
                     }
 
-                    // 4. Update the UI with only the filtered list.
+                    // 4. Update UI
                     _uiState.update { it.copy(isLoading = false, personalTasks = filteredTasks) }
                 }
             }
@@ -91,16 +107,10 @@ class ManageSelfTasksViewModel : ViewModel() {
 
     /**
      * Validates user input and saves a new personal task to Firestore.
-     * On success, it updates the UI state to allow the user to add another task.
-     *
-     * @param title The name of the task.
-     * @param pointsStr The point value of the task as a String.
-     * @param repeatOption The selected repetition frequency (e.g., "Never", "Every Day").
      */
-    fun saveTask(title: String, repeatOption: String) { // <-- REMOVED pointsStr parameter
+    fun saveTask(title: String, repeatOption: String) {
         val currentUser = auth.currentUser ?: return
 
-        // Validation is now simpler
         if (title.isBlank()) {
             _uiState.update { it.copy(error = "Task name cannot be empty.") }
             return
@@ -112,9 +122,15 @@ class ManageSelfTasksViewModel : ViewModel() {
                 val userDoc = db.collection("users").document(currentUser.uid).get().await()
                 val userName = userDoc.getString("name") ?: "Myself"
 
+                // If the user selects a "Repeat" option (e.g., Every Day),
+                // we interpret "Expires In" as effectively 0 (Start Now).
+                // If "Never" (One-time), we let them pick expiration in the UI?
+                // (Based on your UI code, you might be handling Expiration calculation here
+                // or just defaulting to null. The Cloud Function handles the rest).
+
                 val taskData = hashMapOf(
                     "title" to title,
-                    "points" to 1, // <-- HARDCODED point value to 1
+                    "points" to 1,
                     "repeatOption" to repeatOption,
                     "status" to "assigned",
                     "createdAt" to Timestamp.now(),
@@ -122,6 +138,7 @@ class ManageSelfTasksViewModel : ViewModel() {
                     "assignedToUserId" to currentUser.uid,
                     "assignedByUserId" to currentUser.uid,
                     "assignedByName" to userName
+                    // Note: dueDate is null by default here, which means "Start Now"
                 )
 
                 val newDocRef = db.collection("tasks").add(taskData).await()
@@ -129,7 +146,7 @@ class ManageSelfTasksViewModel : ViewModel() {
                 val newTask = Task(
                     id = newDocRef.id,
                     title = title,
-                    points = 1, // Use the hardcoded value here too
+                    points = 1,
                     repeatOption = repeatOption,
                     isPersonal = true,
                     assignedByName = userName
@@ -147,35 +164,27 @@ class ManageSelfTasksViewModel : ViewModel() {
             }
         }
     }
+
     fun deleteTask(taskId: String) {
         if (taskId.isBlank()) return
 
-        // 1. Optimistic UI Update: Immediately remove the task from the local state.
+        // 1. Optimistic UI Update
         _uiState.update { currentState ->
             currentState.copy(
                 personalTasks = currentState.personalTasks.filterNot { it.id == taskId }
             )
         }
 
-        // 2. Perform the backend operation in the background.
+        // 2. Perform Backend Operation
         viewModelScope.launch {
             try {
                 db.collection("tasks").document(taskId).delete().await()
-                // If this succeeds, the real-time listener will eventually get the
-                // same state we already set, so the UI won't change again.
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = "Failed to delete task: ${e.message}") }
-                // Optional: In a production app, you could add logic here
-                // to re-fetch the list if the deletion fails.
             }
         }
     }
 
-    /**
-     * Resets the saveResult state to Idle. This should be called from the UI
-     * after the success or failure state has been handled (e.g., after a snackbar is shown)
-     * to prevent the event from being triggered again on configuration change.
-     */
     fun resetSaveState() {
         _uiState.update { it.copy(isTaskSaved = false) }
     }

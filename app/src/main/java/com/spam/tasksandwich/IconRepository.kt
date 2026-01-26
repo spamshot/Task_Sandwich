@@ -17,13 +17,14 @@ object IconRepository {
     // 1. The single source of truth for all icons.
     val AllIconsMap = mapOf(
         // Default Icons
-        "avatar_1" to R.drawable.carrotdog,
-        "avatar_2" to R.drawable.dallebabyface,
-        "avatar_3" to R.drawable.fglasses,
-        "avatar_4" to R.drawable.firehairguy,
-        "avatar_5" to R.drawable.vgfbhbluehair,
+//        "avatar_1" to R.drawable.carrotdog,
+        "avatar_1" to R.drawable.dallebabyface,
+        "avatar_2" to R.drawable.fglasses,
+        "avatar_3" to R.drawable.firehairguy,
+        "avatar_4" to R.drawable.vgfbhbluehair,
 
         // Milestone Icons
+        "avatar_milestone_2" to R.drawable.carrotdog,
         "avatar_milestone_10" to R.drawable.bluehairguy,
         "avatar_milestone_25" to R.drawable.fzombie,
         "avatar_milestone_35" to R.drawable.women32,
@@ -49,11 +50,12 @@ object IconRepository {
 
     // 2. The single source of truth for which icons are defaults.
     val DefaultIconIds = listOf(
-        "avatar_1", "avatar_2", "avatar_3", "avatar_4", "avatar_5"
+        "avatar_1", "avatar_2", "avatar_3", "avatar_4"
     )
 
     // 3. The single source of truth for milestone definitions.
     val MilestoneIconsMap = mapOf(
+        "avatar_milestone_2" to 2,
         "avatar_milestone_10" to 10,
         "avatar_milestone_25" to 25,
         "avatar_milestone_35" to 35,
