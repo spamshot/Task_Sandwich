@@ -1,6 +1,6 @@
 package com.spam.tasksandwich
 
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material3.*
@@ -19,6 +19,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextButton
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.dp
 
 data class NavDrawerItem(
     val route: String,
@@ -72,7 +73,8 @@ fun AppShell(
                 Column {
                     OutlinedTextField(
                         value = roomName,
-                        onValueChange = { roomName = it },
+                        onValueChange = {
+                            if (it.length <= 17) roomName = it }, // Create room name max 17
                         label = { Text("Room Name") },
                         singleLine = true,
                         isError = errorText != null
@@ -138,7 +140,6 @@ fun AppShell(
         NavDrawerItem(Screen.Home.route, "Home", Icons.Default.Home),
 
         NavDrawerItem(Screen.ManageSelfTasks.route, "Manage Self Tasks", R.drawable.person_raised_hand_24px),
-
         NavDrawerItem(Screen.CreateRoom.route, "Create Room", R.drawable.groups_24px),
         NavDrawerItem(Screen.JoinRoom.route, "Join Room", R.drawable.group_add_24px),
         NavDrawerItem(Screen.ProfileSettings.route, "Profile Settings", Icons.Default.Settings)
@@ -222,10 +223,13 @@ fun AppShell(
                     )
                 }
             }
-        ) { paddingValues ->
+        ) { innerPadding ->
             AppNavHost(
                 navController = navController,
-                paddingValues = paddingValues
+                paddingValues = PaddingValues(
+                    top = innerPadding.calculateTopPadding(),
+                    bottom = 0.dp // Manually reduced bottom padding
+                )
             )
         }
     }

@@ -65,7 +65,9 @@ fun ProfileSetupScreen(
 
             OutlinedTextField(
                 value = name,
-                onValueChange = { name = it },
+                onValueChange = {
+                    if (it.length <= 10) name = it
+                },
                 label = { Text("Your Name") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true
@@ -74,7 +76,7 @@ fun ProfileSetupScreen(
 
             OutlinedTextField(
                 value = age,
-                onValueChange = { age = it },
+                onValueChange = {  if (it.length <= 2)age = it },
                 label = { Text("Your Age (Optional)") },
                 modifier = Modifier.fillMaxWidth(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),

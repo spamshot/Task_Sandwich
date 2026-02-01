@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.google.firebase.Firebase
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.auth
+import com.google.firebase.firestore.FieldValue
 import kotlinx.coroutines.flow.update
 import com.google.firebase.firestore.firestore
 import kotlinx.coroutines.async
@@ -57,6 +58,9 @@ data class RoomDetailUiState(
     val currentUserId: String = "",
     val selectedUserProfile: UserProfile? = null,
     val isLoadingProfileForDialog: Boolean = false,
+    val globallyCensoredUserIds: List<String> = emptyList(),
+    val locallyCensoredUserIds: List<String> = emptyList(),
+    val isLocked: Boolean = false,
 )
 
 class RoomDetailViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
@@ -76,7 +80,8 @@ class RoomDetailViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
         } else {
             _uiState.update { it.copy(currentUserId = auth.currentUser?.uid ?: "") }
             fetchCurrentUserRole()
-            fetchRoomDetails()
+            listenToRoomAndUser()
+//            fetchRoomDetails()
             listenForMembers()
             listenForTasks()
             listenForTopTasks()
@@ -126,6 +131,75 @@ class RoomDetailViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
         _uiState.update { it.copy(selectedUserProfile = null) }
     }
 
+    private fun listenToRoomAndUser() {
+        val currentUserId = auth.currentUser?.uid ?: return
+        db.collection("groups").document(roomId)
+            .addSnapshotListener { snapshot, error ->
+                if (snapshot != null && snapshot.exists()) {
+                    val globalCensored = snapshot.get("censoredUserIds") as? List<String> ?: emptyList()
+
+                    _uiState.update { it.copy(
+                        roomName = snapshot.getString("name") ?: "Room",
+                        joinCode = snapshot.getString("joinCode") ?: "------",
+                        isLocked = snapshot.getBoolean("isLocked") ?: false, // Listen for lock status
+                        globallyCensoredUserIds = globalCensored
+                    ) }
+                }
+            }
+
+        // Listen to the CURRENT USER (For Local Censorship)
+        db.collection("users").document(currentUserId)
+            .addSnapshotListener { snapshot, error ->
+                if (snapshot != null && snapshot.exists()) {
+                    val localCensored = snapshot.get("locallyCensoredUserIds") as? List<String> ?: emptyList()
+
+                    _uiState.update { it.copy(
+                        locallyCensoredUserIds = localCensored
+                    ) }
+                }
+            }
+    }
+
+    fun toggleCensorUserGlobally(targetUserId: String) {
+        // 1. Check current state from the UI State
+        val isCurrentlyCensored = uiState.value.globallyCensoredUserIds.contains(targetUserId)
+
+        // 2. Decide if we are adding or removing
+        val action = if (isCurrentlyCensored) {
+            FieldValue.arrayRemove(targetUserId)
+        } else {
+            FieldValue.arrayUnion(targetUserId)
+        }
+
+        // 3. Update the Room document
+        db.collection("groups").document(roomId)
+            .update("censoredUserIds", action)
+            .addOnSuccessListener {
+                Log.d("CENSOR", "Global toggle success for $targetUserId")
+            }
+    }
+
+    fun toggleCensorUserLocally(targetUserId: String) {
+        val currentUserId = auth.currentUser?.uid ?: return
+
+        // 1. Check current state
+        val isCurrentlyCensored = uiState.value.locallyCensoredUserIds.contains(targetUserId)
+
+        // 2. Decide action
+        val action = if (isCurrentlyCensored) {
+            FieldValue.arrayRemove(targetUserId)
+        } else {
+            FieldValue.arrayUnion(targetUserId)
+        }
+
+        // 3. Update the User's personal document
+        db.collection("users").document(currentUserId)
+            .update("locallyCensoredUserIds", action)
+            .addOnSuccessListener {
+                Log.d("CENSOR", "Local toggle success for $targetUserId")
+            }
+    }
+
     fun deleteRoom() {
         viewModelScope.launch {
             try {
@@ -141,6 +215,18 @@ class RoomDetailViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
         }
     }
 
+    fun toggleRoomLock(currentlyLocked: Boolean) {
+        viewModelScope.launch {
+            try {
+                db.collection("groups").document(roomId)
+                    .update("isLocked", !currentlyLocked)
+                    .await()
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = "Failed to toggle lock: ${e.message}") }
+            }
+        }
+    }
+
     private fun fetchCurrentUserRole() {
         val currentUserId = auth.currentUser?.uid ?: return
         db.collection("groups").document(roomId)
@@ -152,20 +238,6 @@ class RoomDetailViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
                     _uiState.update { it.copy(isAdmin = (role == "admin")) }
                 } else {
                     _uiState.update { it.copy(isAdmin = false) }
-                }
-            }
-    }
-
-    private fun fetchRoomDetails() {
-        db.collection("groups").document(roomId)
-            .addSnapshotListener { snapshot, _ ->
-                snapshot?.let { doc ->
-                    _uiState.update { currentState ->
-                        currentState.copy(
-                            roomName = doc.getString("name") ?: "Room",
-                            joinCode = doc.getString("joinCode") ?: "------"
-                        )
-                    }
                 }
             }
     }
@@ -195,6 +267,17 @@ class RoomDetailViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
                                 members = memberList,
                                 memberCount = memberList.size
                             )
+                        }
+
+                        // --- AUTO-UNLOCK LOGIC ---
+                        if (memberList.size < 3 && _uiState.value.isLocked) {
+                            try {
+                                db.collection("groups").document(roomId)
+                                    .update("isLocked", false)
+                                    .await()
+                            } catch (e: Exception) {
+                                Log.e("RoomLock", "Failed to auto-unlock: ${e.message}")
+                            }
                         }
                     }
                 }
@@ -284,6 +367,13 @@ class RoomDetailViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
 
     fun kickMember(userIdToKick: String) {
         val currentUser = auth.currentUser ?: return
+
+        _uiState.update { currentState ->
+            currentState.copy(
+                members = currentState.members.filter { it.userId != userIdToKick },
+                memberCount = (currentState.memberCount - 1).coerceAtLeast(0)
+            )
+        }
 
         viewModelScope.launch {
             try {

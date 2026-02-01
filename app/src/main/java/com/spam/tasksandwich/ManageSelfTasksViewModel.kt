@@ -52,7 +52,8 @@ class ManageSelfTasksViewModel : ViewModel() {
 
         _uiState.update { it.copy(isLoading = true) }
 
-        // 1. Query: Get all personal tasks created by the user
+        // 1. Query: Get all personal tasks created by the user.
+        // We order by createdAt so the newest ones are at the top.
         db.collection("tasks")
             .whereEqualTo("assignedByUserId", currentUser.uid)
             .whereEqualTo("isPersonal", true)
@@ -64,43 +65,24 @@ class ManageSelfTasksViewModel : ViewModel() {
                 }
 
                 if (snapshot != null) {
-                    // 2. Map documents
+                    // 2. Map documents to Task objects
                     val allPersonalTasks = snapshot.documents.mapNotNull { doc ->
                         doc.toObject(Task::class.java)?.copy(id = doc.id)
                     }
 
-                    // 3. FILTERING LOGIC (Same as HomeViewModel)
-                    // Calculate "Midnight Tomorrow" to hide future tasks
-                    val cal = Calendar.getInstance()
-                    cal.add(Calendar.DAY_OF_YEAR, 1)
-                    cal.set(Calendar.HOUR_OF_DAY, 0)
-                    cal.set(Calendar.MINUTE, 0)
-                    cal.set(Calendar.SECOND, 0)
-                    cal.set(Calendar.MILLISECOND, 0)
-                    val tomorrowMidnight = cal.time
-
+                    // 3. UPDATED FILTERING:
+                    // We have removed the Calendar/Midnight Tomorrow logic.
+                    // In the 'Manage' view, the user should see everything that is active.
                     val filteredTasks = allPersonalTasks.filter { task ->
-                        val due = task.dueDate?.toDate()
-
-                        // Check 1: One-Time Task?
-                        // If it's "Never" repeating, simply check if it's assigned.
-                        // (We show one-time tasks immediately even if due in future, so you can see "3 days left")
-                        if (task.repeatOption == "Never" || task.repeatOption == null) {
-                            return@filter task.status == "assigned"
-                        }
-
-                        // Check 2: Repeating Task?
-                        // Only show if due Today (or in the past).
-                        // Hide if due Tomorrow or Later.
-                        val isDueTodayOrPast = due == null || due.before(tomorrowMidnight)
-
-                        // Also ensure we only show the 'assigned' version (not the old completed one)
-                        // The Cloud Function creates the new one as "assigned".
-                        task.status == "assigned" && isDueTodayOrPast
+                        // Only show tasks that are currently "assigned" (active).
+                        // This prevents old "completed" versions of repeating tasks from cluttering the list.
+                        task.status == "assigned"
                     }
 
-                    // 4. Update UI
+                    // 4. Update UI state
                     _uiState.update { it.copy(isLoading = false, personalTasks = filteredTasks) }
+                } else {
+                    _uiState.update { it.copy(isLoading = false) }
                 }
             }
     }

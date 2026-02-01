@@ -1,5 +1,6 @@
 package com.spam.tasksandwich
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,6 +24,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -56,7 +58,9 @@ fun ManageTasksScreen(
 //            )
 //        }
     ) { paddingValues ->
-        Column(modifier = Modifier.padding(paddingValues)) {
+        Column(modifier = Modifier
+            .padding(paddingValues)
+        ) {
             TabRow(selectedTabIndex = selectedTabIndex) {
                 tabs.forEachIndexed { index, title ->
                     Tab(
@@ -80,7 +84,7 @@ fun ManageTasksScreen(
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AssignTaskForm(uiState: ManageTasksUiState, viewModel: ManageTasksViewModel) {
+fun AssignTaskForm(uiState: ManageTasksUiState, viewModel: ManageTasksViewModel) { //For assigning Task
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
@@ -124,7 +128,11 @@ fun AssignTaskForm(uiState: ManageTasksUiState, viewModel: ManageTasksViewModel)
 
     Scaffold(snackbarHost = { SnackbarHost(hostState = snackbarHostState) }) { padding ->
         Column(
-            modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp).verticalScroll(rememberScrollState()),
+            modifier = Modifier.fillMaxSize()
+//                .padding(padding)
+                .background(Color.Gray.copy(alpha = 0.1f))
+                .padding(12.dp)
+                .verticalScroll(rememberScrollState()),
         ) {
             OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Task Name") }, modifier = Modifier.fillMaxWidth())
             Spacer(Modifier.height(16.dp))
@@ -317,7 +325,7 @@ fun AssignTaskForm(uiState: ManageTasksUiState, viewModel: ManageTasksViewModel)
  * The content for the "Manage Assigned" tab, showing three distinct sections.
  */
 @Composable
-fun AssignedTasksList(uiState: ManageTasksUiState, viewModel: ManageTasksViewModel) {
+fun AssignedTasksList(uiState: ManageTasksUiState, viewModel: ManageTasksViewModel) { //Managed Assigned tasks tab items for card
     // 1. Prepare the grouped data
     val groupedOneTimeTasks = remember(uiState.oneTimeTasks) {
         uiState.oneTimeTasks.groupBy { it.sharedTaskId ?: it.id }
@@ -348,8 +356,9 @@ fun AssignedTasksList(uiState: ManageTasksUiState, viewModel: ManageTasksViewMod
     } else {
         // Content State
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(16.dp),
+            modifier = Modifier.fillMaxSize()
+                .background(Color.Gray.copy(alpha = 0.1f)),
+            contentPadding = PaddingValues(12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             // --- Section 1: Auto-Assign Tasks ---
@@ -454,7 +463,7 @@ fun AutoAssignTaskCard(template: AutoAssignTaskTemplate, onDelete: () -> Unit) {
 }
 
 @Composable
-fun AssignedTaskCard(task: Task, assignedCount: Int, onDelete: () -> Unit) {
+fun AssignedTaskCard(task: Task, assignedCount: Int, onDelete: () -> Unit) { //Task Card for Assigned Tasks
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp)) {
             Text(task.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)

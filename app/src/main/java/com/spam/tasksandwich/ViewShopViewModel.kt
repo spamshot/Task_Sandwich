@@ -26,7 +26,8 @@ data class ViewShopUiState(
     val cartItems: List<ShopItem> = emptyList(),
     val cartTotal: Int = 0,
     val checkoutSuccess: Boolean = false,
-    val error: String? = null
+    val error: String? = null,
+
 )
 
 /**

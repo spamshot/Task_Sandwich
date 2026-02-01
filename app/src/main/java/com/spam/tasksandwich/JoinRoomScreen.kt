@@ -11,7 +11,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-
+//TODO Don't think file is needed anymore
 @Composable
 fun JoinRoomScreen(
     joinRoomViewModel: JoinRoomViewModel = viewModel(),

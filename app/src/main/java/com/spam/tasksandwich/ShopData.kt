@@ -5,7 +5,9 @@ data class ShopItem(
     val name: String = "",
     val cost: Int = 0,
     val mysteryText: String = "",
-    val autoRedeem: Boolean = false
+    val autoRedeem: Boolean = false,
+
+
 )
 
 /**
@@ -19,5 +21,6 @@ data class PurchaseLogItem(
     val purchasedByUserId: String = "",
     val purchasedByUserName: String = "",
     val status: String = "pending",
-    val mysteryText: String = ""
+    val mysteryText: String = "",
+    val roomId: String = "",
 )

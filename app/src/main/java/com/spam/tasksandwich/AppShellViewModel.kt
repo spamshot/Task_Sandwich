@@ -1,5 +1,6 @@
 package com.spam.tasksandwich
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.Firebase
@@ -18,7 +19,8 @@ data class AppShellUiState(
     val newlyJoinedRoomId: String? = null,
     val error: String? = null,
     // --- NEW: Controls visibility of the Create button ---
-    val canCreateRoom: Boolean = true
+    val canCreateRoom: Boolean = true,
+    val isLoading: Boolean = false
 )
 
 class AppShellViewModel : ViewModel() {
@@ -29,22 +31,29 @@ class AppShellViewModel : ViewModel() {
     val uiState = _uiState.asStateFlow()
 
     init {
-        // Start listening to the room count as soon as the app starts
-        listenForOwnedRoomCount()
+        // Use an AuthStateListener to ensure we start the room count
+        // listener as soon as the user is actually confirmed.
+        auth.addAuthStateListener { firebaseAuth ->
+            val user = firebaseAuth.currentUser
+            if (user != null) {
+                listenForOwnedRoomCount(user.uid)
+            }
+        }
     }
 
     // --- NEW LOGIC: Count how many rooms the user owns ---
-    private fun listenForOwnedRoomCount() {
-        val currentUser = auth.currentUser ?: return
-
+    private fun listenForOwnedRoomCount(uid: String) {
         db.collection("groups")
-            .whereEqualTo("adminUserId", currentUser.uid)
+            .whereEqualTo("adminUserId", uid)
             .addSnapshotListener { snapshot, error ->
-                if (error != null) return@addSnapshotListener
+                if (error != null) {
+                    Log.e("AppShellVM", "Room count listener error", error)
+                    return@addSnapshotListener
+                }
 
                 if (snapshot != null) {
                     val count = snapshot.size()
-                    // If count is 4 or more, disable creation
+                    Log.d("AppShellVM", "User owns $count rooms")
                     _uiState.update { it.copy(canCreateRoom = count < 4) }
                 }
             }
@@ -79,6 +88,21 @@ class AppShellViewModel : ViewModel() {
                 val groupRef = db.collection("groups").document(groupId)
 
                 val templatesSnapshot = groupRef.collection("autoAssignTemplates").get().await()
+
+                val memberCountQuery = groupRef.collection("groupMembers").count().get(com.google.firebase.firestore.AggregateSource.SERVER).await()
+                val currentMemberCount = memberCountQuery.count
+
+                if (currentMemberCount >= 30) {
+                    _uiState.update { it.copy(error = "This room is full (Max 30 members).") }
+                    return@launch
+                }
+
+                val isLocked = groupDoc.getBoolean("isLocked") ?: false // Get the lock status
+
+                if (isLocked) {
+                    _uiState.update { it.copy(error = "This room is locked by the admin. You cannot join at this time.") }
+                    return@launch // STOP HERE - Don't run the batch join logic
+                }
 
                 val adminId = groupDoc.getString("adminUserId")
                 var adminName = "Admin"

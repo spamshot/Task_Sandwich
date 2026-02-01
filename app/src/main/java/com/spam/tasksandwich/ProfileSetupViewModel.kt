@@ -27,8 +27,8 @@ class ProfileSetupViewModel : ViewModel() {
 
     fun saveProfile(name: String, age: String) {
         // Basic validation
-        if (name.isBlank() ) { // || age.isBlank()
-            _uiState.update { it.copy(error = "Name and age cannot be empty.") }
+        if (name.isBlank() || name.length > 10) { // || age.isBlank()
+            _uiState.update { it.copy(error = "Name cannot be empty & must be less than 10 characters.") }
             return
         }
 

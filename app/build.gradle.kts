@@ -14,8 +14,8 @@ android {
         applicationId = "com.spam.tasksandwich"
         minSdk = 30
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -76,7 +76,7 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0")
 
     // Navigation for moving between screens
-    implementation("androidx.navigation:navigation-compose:2.9.6")
+    implementation("androidx.navigation:navigation-compose:2.9.7")
 
     // Firebase Bill of Materials (BoM) - This handles versions for other Firebase libs
     implementation(platform("com.google.firebase:firebase-bom:34.8.0"))

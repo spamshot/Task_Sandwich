@@ -1,5 +1,6 @@
 package com.spam.tasksandwich
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.Firebase
@@ -17,28 +18,26 @@ import kotlinx.coroutines.tasks.await
 
 // Using the UserProfile data class from HomeData.kt
 
-data class UserPurchaseLogItem( // A new data class for this screen
+data class UserPurchaseLogItem(
     val id: String = "",
     val itemName: String = "",
     val itemCost: Int = 0,
-    val roomName: String = "A Room", // We need to know which room it was from
+    val roomName: String = "A Room",
     val status: String = "",
     val mysteryText: String = "",
-    val purchasedAt: Timestamp? = null
+    val purchasedAt: Timestamp? = null,
+    val roomId: String = "", // Used for deletion path
 )
 
 data class ProfileSettingsUiState(
-
     val isLoading: Boolean = true,
     val isSaving: Boolean = false,
     val userProfile: UserProfile? = null,
     val saveSuccess: Boolean = false,
     val logoutSuccess: Boolean = false,
     val error: String? = null,
-
     val purchaseHistory: List<UserPurchaseLogItem> = emptyList(),
     val tasks: List<Task> = emptyList()
-
 )
 
 class ProfileSettingsViewModel : ViewModel() {
@@ -50,57 +49,57 @@ class ProfileSettingsViewModel : ViewModel() {
     val uiState = _uiState.asStateFlow()
 
     init {
-        loadUserProfile()
-        listenForPurchaseHistory()
-        fetchAssignedTasks()
+        loadAllData()
     }
 
-    private fun loadUserProfile() {
+    private fun loadAllData() {
+        _uiState.update { it.copy(isLoading = true) }
+        val currentUser = auth.currentUser
         if (currentUser == null) {
             _uiState.update { it.copy(isLoading = false, error = "User not logged in.") }
             return
         }
-        // Change from a one-time .get() to a real-time .addSnapshotListener
-        db.collection("users").document(currentUser.uid)
-            .addSnapshotListener { document, error ->
-                if (error != null) {
-                    _uiState.update { it.copy(isLoading = false, error = "Failed to load profile: ${error.message}") }
-                    return@addSnapshotListener
-                }
 
-                if (document != null && document.exists()) {
-                    // This logic is the same, but now it will run automatically
-                    // whenever the user's document changes in the database.
-                    val profile = document.toObject(UserProfile::class.java)?.copy(uid = document.id)
-                    _uiState.update { it.copy(isLoading = false, userProfile = profile) }
+        var userLoaded = false
+        var historyLoaded = false
+        var tasksLoaded = false
+
+        fun checkCompletion() {
+            if (userLoaded && historyLoaded && tasksLoaded) {
+                _uiState.update { it.copy(isLoading = false) }
+            }
+        }
+
+        // 1. User Profile Listener
+        db.collection("users").document(currentUser.uid)
+            .addSnapshotListener { snapshot, error ->
+                if (snapshot != null && snapshot.exists()) {
+                    val profile = snapshot.toObject(UserProfile::class.java)?.copy(uid = snapshot.id)
+                    _uiState.update { it.copy(userProfile = profile) }
                 }
+                userLoaded = true
+                checkCompletion()
             }
 
-    }
-
-
-    private fun listenForPurchaseHistory() {
-        if (currentUser == null) return
-
-        // This is a Collection Group Query. It queries all collections named "purchaseLog".
+        // 2. Purchase History Listener (Collection Group)
         db.collectionGroup("purchaseLog")
             .whereEqualTo("purchasedByUserId", currentUser.uid)
             .orderBy("purchasedAt", Query.Direction.DESCENDING)
-            .limit(50) // Limit to the last 50 purchases for performance
+            .limit(50)
             .addSnapshotListener { snapshot, error ->
                 if (snapshot != null) {
-                    // This is a complex query. For each purchase, we need to find its parent group to get the room name.
                     viewModelScope.launch {
                         val historyJobs = snapshot.documents.map { doc ->
                             async {
-                                // Get the parent group document reference
                                 val groupRef = doc.reference.parent.parent
                                 var roomName = "Unknown Room"
+                                val currentRoomId = groupRef?.id ?: ""
+
                                 if (groupRef != null) {
-                                    val groupDoc = groupRef.get().await()
-                                    if (groupDoc.exists()) {
-                                        roomName = groupDoc.getString("name") ?: roomName
-                                    }
+                                    try {
+                                        val groupDoc = groupRef.get().await()
+                                        roomName = groupDoc.getString("name") ?: "Unnamed Room"
+                                    } catch (e: Exception) { /* use default */ }
                                 }
 
                                 UserPurchaseLogItem(
@@ -110,98 +109,132 @@ class ProfileSettingsViewModel : ViewModel() {
                                     roomName = roomName,
                                     status = doc.getString("status") ?: "",
                                     purchasedAt = doc.getTimestamp("purchasedAt"),
-                                    mysteryText = doc.getString("mysteryText") ?: ""
+                                    mysteryText = doc.getString("mysteryText") ?: "",
+                                    roomId = currentRoomId
                                 )
                             }
                         }
                         val historyList = historyJobs.awaitAll()
                         _uiState.update { it.copy(purchaseHistory = historyList) }
+                        historyLoaded = true
+                        checkCompletion()
                     }
+                } else {
+                    historyLoaded = true
+                    checkCompletion()
                 }
             }
+
+        // 3. Assigned Tasks Listener
+        db.collection("tasks")
+            .whereEqualTo("assignedToUserId", currentUser.uid)
+            .orderBy("createdAt", Query.Direction.DESCENDING)
+            .addSnapshotListener { snapshot, error ->
+                if (snapshot != null) {
+                    val taskList = snapshot.documents.mapNotNull { doc ->
+                        doc.toObject(Task::class.java)?.copy(id = doc.id)
+                    }
+                    _uiState.update { it.copy(tasks = taskList) }
+                }
+                tasksLoaded = true
+                checkCompletion()
+            }
+    }
+
+    fun deleteAccount() {
+        val user = auth.currentUser ?: return
+        _uiState.update { it.copy(isSaving = true) }
+
+        viewModelScope.launch {
+            try {
+                // 1. Delete their data from Firestore first
+                db.collection("users").document(user.uid).delete().await()
+
+                // 2. Delete the actual Authentication account
+                user.delete().await()
+
+                // 3. SUCCESS: Reuse the logoutSuccess flag to trigger navigation
+                _uiState.update { it.copy(isSaving = false, logoutSuccess = true) }
+
+            } catch (e: Exception) {
+                // Check for the specific "Requires Recent Login" error from Firebase
+                val errorMessage = if (e.message?.contains("recent-login") == true) {
+                    "Security: Please log out and log back in to verify your identity before deleting your account."
+                } else {
+                    e.message ?: "Account deletion failed."
+                }
+
+                _uiState.update { it.copy(isSaving = false, error = errorMessage) }
+            }
+        }
+    }
+
+    /**
+     * DELETE TASK: Uses OPTIMISTIC UPDATE pattern from ManageTasksViewModel
+     */
+    fun deleteTask(taskId: String) {
+        if (taskId.isBlank()) return
+
+        // 1. OPTIMISTIC UPDATE: Remove from UI immediately
+        _uiState.update { currentState ->
+            currentState.copy(
+                tasks = currentState.tasks.filter { it.id != taskId }
+            )
+        }
+
+        // 2. BACKEND REQUEST: Background deletion
+        viewModelScope.launch {
+            try {
+                db.collection("tasks").document(taskId).delete().await()
+                Log.d("DELETE", "Task successfully deleted from Firestore")
+            } catch (e: Exception) {
+                // If it fails, you can optionally reload or show error
+                _uiState.update { it.copy(error = "Delete failed: ${e.message}") }
+            }
+        }
+    }
+
+    /**
+     * DELETE TRANSACTION: Uses OPTIMISTIC UPDATE pattern from ManageTasksViewModel
+     */
+    fun deleteTransaction(purchaseId: String, groupId: String) {
+        if (purchaseId.isBlank() || groupId.isBlank()) return
+
+        // 1. OPTIMISTIC UPDATE: Remove from UI immediately
+        _uiState.update { currentState ->
+            currentState.copy(
+                purchaseHistory = currentState.purchaseHistory.filter { it.id != purchaseId }
+            )
+        }
+
+        // 2. BACKEND REQUEST: Background deletion
+        viewModelScope.launch {
+            try {
+                db.collection("groups").document(groupId)
+                    .collection("purchaseLog").document(purchaseId)
+                    .delete().await()
+                Log.d("DELETE", "Transaction successfully deleted from Firestore")
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = "Delete failed: ${e.message}") }
+            }
+        }
     }
 
     fun saveProfile(name: String, age: String, email: String, iconId: String) {
         if (currentUser == null) return
-        _uiState.update { it.copy(isSaving = true, error = null) }
+        _uiState.update { it.copy(isSaving = true) }
         viewModelScope.launch {
             try {
-                // Update email in Firebase Authentication (if changed)
-                if (email != currentUser.email) {
-                    currentUser.updateEmail(email).await()
-                }
-
-                // Update data in Firestore
-                val updatedData = mapOf(
-                    "name" to name,
-                    "age" to age.toIntOrNull(),
-                    "email" to email,
-                    "selectedIconId" to iconId
-                )
+                if (email != currentUser.email) currentUser.updateEmail(email).await()
+                val updatedData = mapOf("name" to name, "age" to age.toIntOrNull(), "email" to email, "selectedIconId" to iconId)
                 db.collection("users").document(currentUser.uid).update(updatedData).await()
                 _uiState.update { it.copy(isSaving = false, saveSuccess = true) }
             } catch (e: Exception) {
-                // This can fail if email is already in use or requires recent login
                 _uiState.update { it.copy(isSaving = false, error = e.message) }
             }
         }
     }
 
-    fun onSaveHandled() {
-        _uiState.update { it.copy(saveSuccess = false) }
-    }
-
-    private fun fetchAssignedTasks() {
-        val currentUser = auth.currentUser
-        if (currentUser == null) {
-            _uiState.update { it.copy(isLoading = false, error = "User not logged in.") }
-            return
-        }
-
-        // Query for all tasks created by the current user, order by most recent
-        db.collection("tasks")
-            .whereEqualTo("assignedToUserId", currentUser.uid)
-            .orderBy("createdAt", Query.Direction.DESCENDING)
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    _uiState.update { it.copy(isLoading = false, error = "Failed to load tasks.") }
-                    return@addSnapshotListener
-                }
-                if (snapshot != null) {
-                    val taskList = snapshot.toObjects(Task::class.java).mapIndexed { index, task ->
-                        task.copy(id = snapshot.documents[index].id) // Manually add the document ID
-                    }
-                    _uiState.update { it.copy(isLoading = false, tasks = taskList) }
-                }
-            }
-    }
-
-    fun deleteTask(taskId: String) {
-        // 1. Optimistic UI Update: Immediately remove the task from the local state.
-        _uiState.update { currentState ->
-            currentState.copy(
-                tasks = currentState.tasks.filterNot { it.id == taskId }
-            )
-        }
-
-        // 2. Perform the backend operation.
-        viewModelScope.launch {
-            try {
-                db.collection("tasks").document(taskId).delete().await()
-                // If this succeeds, the real-time listener will eventually get the
-                // same state we already set, so the UI won't change again.
-            } catch (e: Exception) {
-                _uiState.update { it.copy(error = "Failed to delete task: ${e.message}") }
-                // OPTIONAL: In a more complex app, you could add logic here
-                // to add the task back to the list if the deletion fails,
-                // and show a "Couldn't delete task" snackbar.
-                // For now, just showing the error is sufficient.
-            }
-        }
-    }
-
-    fun logout() {
-        auth.signOut()
-        _uiState.update { it.copy(logoutSuccess = true) }
-    }
+    fun onSaveHandled() { _uiState.update { it.copy(saveSuccess = false) } }
+    fun logout() { auth.signOut(); _uiState.update { it.copy(logoutSuccess = true) } }
 }

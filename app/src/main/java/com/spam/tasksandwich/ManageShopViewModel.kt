@@ -1,5 +1,6 @@
 package com.spam.tasksandwich
 
+import android.widget.Toast
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -14,6 +15,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import androidx.compose.ui.platform.LocalContext
 
 
 data class ManageShopUiState(
@@ -30,6 +32,7 @@ class ManageShopViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
     private val db = Firebase.firestore
     private val auth = Firebase.auth
     private val roomId: String = savedStateHandle.get("roomId")!!
+
 
     private val _uiState = MutableStateFlow(ManageShopUiState())
     val uiState = _uiState.asStateFlow()
@@ -174,8 +177,8 @@ class ManageShopViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
         // --- NEW FUNCTION: UPDATE ---
         fun updateShopItem(itemId: String, newName: String, newCostStr: String, newMysteryText: String, newAutoRedeem: Boolean) {
             val newCost = newCostStr.toIntOrNull()
-            if (itemId.isBlank() || newName.isBlank() || newCost == null || newCost <= 0) {
-                _uiState.update { it.copy(error = "Please enter a valid name and cost.") }
+            if (itemId.isBlank() || newName.isBlank()|| newCost == null || newCost < 0) {
+                _uiState.update { it.copy(error = "Please enter a valid name and a non-negative cost.") }
                 return
             }
 
@@ -206,8 +209,8 @@ class ManageShopViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
 
         fun saveShopItem(name: String, costStr: String, mysteryText: String, autoRedeem: Boolean) {
             val cost = costStr.toIntOrNull()
-            if (name.isBlank() || cost == null || cost <= 0) {
-                _uiState.update { it.copy(error = "Please enter a valid name and positive cost.") }
+            if (name.isBlank() || cost == null || cost < 0) {
+                _uiState.update { it.copy(error = "Please enter a valid name and a non-negative cost.") }
                 return
             }
 

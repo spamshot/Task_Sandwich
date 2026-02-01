@@ -117,23 +117,6 @@ fun ManageShopScreen(
     }
 
     Scaffold(
-//        topBar = {
-//            TopAppBar(
-//                title = { Text("Manage Shop") },
-//                navigationIcon = { IconButton(onClick = onNavigateBack) {
-//                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Go Back")
-//                } },
-//                actions = {
-//                    // Only show the "Clear History" button when the History tab is selected
-//                    if (selectedTabIndex == 1) {
-//                        IconButton(onClick = { showClearHistoryDialog = true }) {
-//                            Icon(Icons.Default.Clear, contentDescription = "Clear History")
-//                        }
-//                    }
-//                }
-//            )
-//                 }
-//        ,
 
         // The FAB is only shown when the "Shop Items" tab is selected
         floatingActionButton = {
@@ -144,7 +127,10 @@ fun ManageShopScreen(
             }
         }
     ) { paddingValues ->
-        Column(modifier = Modifier.padding(paddingValues)) {
+        Column(modifier =
+            Modifier
+//                .padding(paddingValues)
+        ) {
             // The TabRow for navigating between sections
             TabRow(selectedTabIndex = selectedTabIndex) {
                 tabs.forEachIndexed { index, title ->
@@ -175,7 +161,7 @@ fun PendingPurchasesList(purchases: List<PurchaseLogItem>, viewModel: ManageShop
             Text("No pending rewards to approve.")
         }
     } else {
-        LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        LazyColumn(contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             // Add a key to each item, using its unique ID from Firestore.
             items(items = purchases, key = { it.id }) { purchase ->
                 PendingPurchaseCard(
@@ -196,7 +182,7 @@ fun PurchaseHistoryList(history: List<PurchaseLogItem>) {
             Text("No past purchases.")
         }
     } else {
-        LazyColumn(contentPadding = PaddingValues(16.dp)) {
+        LazyColumn(contentPadding = PaddingValues(12.dp)) {
             // Add a key to each item, using its unique ID from Firestore.
             items(items = history, key = { it.id }) { purchase ->
                 PurchaseHistoryItem(purchase = purchase)
@@ -213,7 +199,7 @@ fun ShopItemsList(items: List<ShopItem>, onLongPress: (ShopItem) -> Unit) {
             Text("No shop items created yet. Press the '+' button to add one.")
         }
     } else {
-        LazyColumn(contentPadding = PaddingValues(16.dp)) {
+        LazyColumn(contentPadding = PaddingValues(12.dp)) {
             items(items) { item ->
                 ShopItemLogItem(item = item, onLongPress = { onLongPress(item) })
                 Divider()
@@ -307,6 +293,7 @@ fun EditShopItemDialog(
     var editMysteryText by remember { mutableStateOf(item.mysteryText) }
     var editAutoRedeem by remember { mutableStateOf(item.autoRedeem) }
 
+    val isFormValid = editName.isNotBlank() && editCost.toIntOrNull() != null
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -346,7 +333,14 @@ fun EditShopItemDialog(
                 }
             }
         },
-        confirmButton = { TextButton(onClick = { onConfirm(editName, editCost, editMysteryText, editAutoRedeem) }) { Text("Save") } },
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(editName, editCost, editMysteryText, editAutoRedeem) },
+                enabled = isFormValid
+            ) {
+                Text("Save")
+            }
+        },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
 }

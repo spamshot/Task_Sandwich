@@ -46,88 +46,89 @@ class ManageTasksViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
     private val _uiState = MutableStateFlow(ManageTasksUiState())
     val uiState = _uiState.asStateFlow()
 
+    private var allTasksCache: List<Task> = emptyList()
+
     init {
-        listenForMembers()
-        listenForAssignedTasks()
-        listenForAutoAssignTemplates()
+        loadAllData()
     }
 
-    private fun listenForMembers() {
+    private fun loadAllData() {
         if (roomId.isBlank()) {
             _uiState.update { it.copy(isLoading = false, error = "Room ID is missing.") }
             return
         }
+
+        _uiState.update { it.copy(isLoading = true) }
+
+        // HomeViewModel Pattern: Tracking multiple listeners
+        var membersLoaded = false
+        var tasksLoaded = false
+        var templatesLoaded = false
+
+        fun checkCompletion() {
+            if (membersLoaded && tasksLoaded && templatesLoaded) {
+                _uiState.update { it.copy(isLoading = false) }
+            }
+        }
+
+        // 1. Listen for Members
         db.collection("groups").document(roomId).collection("groupMembers")
             .orderBy("joinedAt", Query.Direction.ASCENDING)
             .addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    Log.e("ManageTasksVM", "Error loading members", error)
-                    return@addSnapshotListener
-                }
-                snapshot?.let { querySnapshot ->
+                if (snapshot != null) {
                     viewModelScope.launch {
-                        try {
-                            val memberJobs = querySnapshot.documents.map { memberDoc ->
-                                async {
-                                    val userDoc = db.collection("users").document(memberDoc.id).get().await()
-                                    RoomMember(
-                                        userId = memberDoc.id,
-                                        name = userDoc.getString("name") ?: "Unknown User",
-                                        totalPointsInGroup = 0
-                                    )
-                                }
+                        val memberJobs = snapshot.documents.map { memberDoc ->
+                            async {
+                                val userDoc = db.collection("users").document(memberDoc.id).get().await()
+                                RoomMember(
+                                    userId = memberDoc.id,
+                                    name = userDoc.getString("name") ?: "Unknown User",
+                                    totalPointsInGroup = 0
+                                )
                             }
-                            val memberList = memberJobs.awaitAll()
-                            _uiState.update { it.copy(members = memberList) }
-                        } catch (e: Exception) {
-                            Log.e("ManageTasksVM", "Error resolving member names", e)
                         }
+                        _uiState.update { it.copy(members = memberJobs.awaitAll()) }
+                        membersLoaded = true
+                        checkCompletion()
                     }
+                } else {
+                    membersLoaded = true; checkCompletion()
                 }
             }
-    }
 
-    private fun listenForAssignedTasks() {
-        // NOTE: This query requires a Firestore Index because of the 'where' + 'orderBy'.
-        // If the index is missing, the 'error' block below will trigger.
-        // Check Logcat for a URL to create the index automatically.
+        // 2. Listen for Assigned Tasks (THE FIX: No date filtering)
         db.collection("tasks")
             .whereEqualTo("groupId", roomId)
-            .whereEqualTo("status", "assigned")
+            .whereEqualTo("status", "assigned") // We only want the active ones
             .orderBy("createdAt", Query.Direction.DESCENDING)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    // FIX: Handle error properly so the loading wheel stops
-                    Log.e("ManageTasksVM", "Listen failed (Check for missing Index in Logcat): ${error.message}")
-                    _uiState.update { it.copy(isLoading = false, error = "Failed to load tasks. Check logs.") }
+                    Log.e("ManageTasksVM", "Task listener error: ${error.message}")
+                    tasksLoaded = true; checkCompletion()
                     return@addSnapshotListener
                 }
 
                 if (snapshot != null) {
-                    val allTasks = snapshot.documents.mapNotNull { doc ->
+                    allTasksCache = snapshot.documents.mapNotNull { doc ->
                         doc.toObject(Task::class.java)?.copy(id = doc.id)
                     }
-                    // FIX: Updates UI immediately and stops loading
-                    _uiState.update {
-                        it.copy(
-                            isLoading = false,
-                            repeatingTasks = allTasks.filter { task -> task.repeatOption != "Never" },
-                            oneTimeTasks = allTasks.filter { task -> task.repeatOption == "Never" }
+
+                    // Immediately update UI lists based on the cache
+                    _uiState.update { currentState ->
+                        currentState.copy(
+                            repeatingTasks = allTasksCache.filter { it.repeatOption != "Never" && it.repeatOption != null },
+                            oneTimeTasks = allTasksCache.filter { it.repeatOption == "Never" || it.repeatOption == null }
                         )
                     }
                 }
+                tasksLoaded = true
+                checkCompletion()
             }
-    }
 
-    private fun listenForAutoAssignTemplates() {
+        // 3. Listen for Auto-Assign Templates
         db.collection("groups").document(roomId).collection("autoAssignTemplates")
             .orderBy("createdAt", Query.Direction.DESCENDING)
             .addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    Log.e("ManageTasksVM", "Error loading templates", error)
-                    // We don't necessarily stop main loading here, but good to know
-                    return@addSnapshotListener
-                }
                 if (snapshot != null) {
                     val templates = snapshot.documents.mapNotNull { doc ->
                         AutoAssignTaskTemplate(
@@ -138,7 +139,34 @@ class ManageTasksViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
                     }
                     _uiState.update { it.copy(autoAssignTemplates = templates) }
                 }
+                templatesLoaded = true
+                checkCompletion()
             }
+    }
+
+    // --- OPTIMISTIC UPDATES (Mirroring your working logic) ---
+
+    fun deleteTaskGroup(tasks: List<Task>) {
+        val idsToDelete = tasks.map { it.id }.toSet()
+
+        // 1. Optimistic Update: Remove from UI immediately
+        _uiState.update { currentState ->
+            currentState.copy(
+                repeatingTasks = currentState.repeatingTasks.filter { it.id !in idsToDelete },
+                oneTimeTasks = currentState.oneTimeTasks.filter { it.id !in idsToDelete }
+            )
+        }
+
+        // 2. Background Deletion
+        viewModelScope.launch {
+            try {
+                val batch = db.batch()
+                tasks.forEach { batch.delete(db.collection("tasks").document(it.id)) }
+                batch.commit().await()
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = "Delete failed: ${e.message}") }
+            }
+        }
     }
 
     fun saveTask(
@@ -256,50 +284,7 @@ class ManageTasksViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
         }
     }
 
-    // FIX: Using the secure batch delete we discussed earlier
-    fun deleteTaskGroup(tasks: List<Task>) {
-        // 1. Get the list of IDs we are about to delete
-        val idsToDelete = tasks.map { it.id }.toSet()
 
-        // 2. OPTIMISTIC UPDATE:
-        // Immediately remove these tasks from the UI state (don't wait for Firebase)
-        _uiState.update { currentState ->
-            currentState.copy(
-                // Keep only tasks whose ID is NOT in our delete list
-                repeatingTasks = currentState.repeatingTasks.filter { it.id !in idsToDelete },
-                oneTimeTasks = currentState.oneTimeTasks.filter { it.id !in idsToDelete },
-
-                // Optional: Show saving spinner if you want,
-                // but usually immediate removal feels snappier without it.
-                isSaving = true
-            )
-        }
-
-        // 3. Perform the actual Network Request in the background
-        viewModelScope.launch {
-            try {
-                val batch = db.batch()
-                tasks.forEach { task ->
-                    val docRef = db.collection("tasks").document(task.id)
-                    batch.delete(docRef)
-                }
-
-                // Commit to Firestore
-                batch.commit().await()
-
-                // Success: Just turn off the saving flag
-                // (The UI is already correct because we updated it in step 2)
-                _uiState.update { it.copy(isSaving = false) }
-
-            } catch (e: Exception) {
-                // If the delete FAILED, we should probably show an error.
-                // In a perfect world, we would also add the tasks back to the list here.
-                _uiState.update {
-                    it.copy(isSaving = false, error = "Failed to delete: ${e.message}")
-                }
-            }
-        }
-    }
 
     fun deleteAutoAssignTemplate(templateId: String) {
         // Optimistic UI Update

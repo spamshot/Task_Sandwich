@@ -1,7 +1,6 @@
 package com.spam.tasksandwich
 
 
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -11,7 +10,6 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -93,12 +91,12 @@ fun AddSelfTaskForm(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 24.dp),
+                    .padding(horizontal = 14.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
                 Text("Add a Personal Task", style = MaterialTheme.typography.headlineMedium)
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
                 // Task Name Field
                 OutlinedTextField(
@@ -108,17 +106,6 @@ fun AddSelfTaskForm(
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Points Field
-//                OutlinedTextField(
-//                    value = points,
-//                    onValueChange = { points = it },
-//                    label = { Text("Points (Optional)") },
-//                    modifier = Modifier.fillMaxWidth(),
-//                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-//                    singleLine = true
-//                )
                 Spacer(modifier = Modifier.height(16.dp))
 
                 // Repeat Option Dropdown
@@ -223,27 +210,29 @@ fun ManageSelfTasksList(uiState: ManageSelfTasksUiState, viewModel: ManageSelfTa
             items(items = uiState.personalTasks, key = { it.id }) { task ->
                 SelfTaskItem(
                     task = task,
-                    onLongPress = { taskToAction = task }
+                    onCancelClick = { taskToAction = task }
                 )
             }
         }
     }
 }
 @Composable
-fun SelfTaskItem(task: Task, onLongPress: () -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth().pointerInput(Unit) {
-        detectTapGestures(onLongPress = { onLongPress() })
-    }) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+fun SelfTaskItem(task: Task, onCancelClick: () -> Unit) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(12.dp),
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(task.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Text("Repeats: ${task.repeatOption}", style = MaterialTheme.typography.bodySmall)
+            Text(task.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text("Points: ${task.points}", style = MaterialTheme.typography.bodyMedium)
+            Text("Repeats: ${task.repeatOption}", style = MaterialTheme.typography.bodyMedium)
+
+
+            Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(
+                    onClick = onCancelClick,
+                )
+                { Text("Cancel Task") }
             }
-            Text("${task.points} pts", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
         }
     }
 }

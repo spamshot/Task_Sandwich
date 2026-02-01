@@ -52,25 +52,7 @@ fun ViewShopScreen(
 
     Scaffold(
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
-//        topBar = {
-//            TopAppBar(
-//                title = { Text("${uiState.roomName} Shop") },
-//                navigationIcon = {
-//                    IconButton(onClick = onNavigateBack) {
-//                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Go Back")
-//                    }
-//                },
-//                actions = {
-//                    // Display the user's current point total for this room in the top bar.
-//                    Text(
-//                        text = "Your Points: ${uiState.userPointsInRoom}",
-//                        modifier = Modifier.padding(end = 16.dp),
-//                        style = MaterialTheme.typography.titleMedium,
-//                        fontWeight = FontWeight.Bold
-//                    )
-//                }
-//            )
-//        }
+
     ) { paddingValues ->
         if (uiState.isLoading) {
             Box(Modifier.fillMaxSize().padding(paddingValues), contentAlignment = Alignment.Center) {
