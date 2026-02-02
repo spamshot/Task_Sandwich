@@ -154,30 +154,29 @@ class HomeViewModel : ViewModel(), RefreshesViewModel {
                     doc.toObject(Task::class.java)?.copy(id = doc.id)
                 }
 
-                // --- NEW FILTERING LOGIC ---
-                // Calculate Midnight Tomorrow (The start of the next day)
+
+                // Calculate Midnight the DAY AFTER Tomorrow (48-hour window)
+                // This ensures tasks due tomorrow evening are visible today.
                 val cal = Calendar.getInstance()
-                cal.add(Calendar.DAY_OF_YEAR, 1)
+                cal.add(Calendar.DAY_OF_YEAR, 1) // Change from 1 to 2. Change 1 from 2 so you can test next day
                 cal.set(Calendar.HOUR_OF_DAY, 0)
                 cal.set(Calendar.MINUTE, 0)
                 cal.set(Calendar.SECOND, 0)
                 cal.set(Calendar.MILLISECOND, 0)
-                val tomorrowMidnight = cal.time
+                val cutoffTime = cal.time // This is now Midnight the day after tomorrow
 
                 userTasks = allTasks.filter { task ->
                     val due = task.dueDate?.toDate()
 
-                    // Rule 1: Always show tasks that don't repeat (Expires In tasks).
-                    // We want users to see "Due in 3 days" immediately.
+                    // Rule 1: Always show one-time tasks (Function will delete them from DB when done)
                     if (task.repeatOption == "Never" || task.repeatOption == null) {
                         return@filter true
                     }
 
-                    // Rule 2: If it IS a repeating task, only show it if:
-                    // A. It has no date (fallback)
-                    // B. It is due Today or in the Past.
-                    // C. HIDE IT if it is due Tomorrow or Later.
-                    due == null || due.before(tomorrowMidnight)
+                    // Rule 2: Repeating tasks
+                    // Show if: No date OR due before the 48-hour cutoff.
+                    // This allows "Tomorrow's" daily tasks to show up today.
+                    due == null || due.before(cutoffTime)
                 }
 
                 updateGroupedTasks()
