@@ -36,6 +36,7 @@ import java.util.Locale
 import android.widget.Toast
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
@@ -218,6 +219,47 @@ fun ProfileSettingsForm(uiState: ProfileSettingsUiState, viewModel: ProfileSetti
     }
 }
 
+@Composable
+fun DeleteConfirmationDialog(
+    itemName: String,
+    warningMessage: String, // ADD THIS PARAMETER
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Delete Item") },
+        text = {
+            Column {
+                Text("Are you sure you want to delete '$itemName'?")
+                Spacer(Modifier.height(8.dp))
+                // Display the custom warning message here
+                Text(
+                    text = warningMessage,
+                    style = MaterialTheme.typography.bodySmall,
+                    // If it contains "ACTIVE", make it Red to stand out
+                    color = if (warningMessage.contains("ACTIVE")) MaterialTheme.colorScheme.error else Color.Gray
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = onConfirm,
+                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+            ) {
+                Text("Delete")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+
+
 /**
  * Tab 1: Transaction Log (Flattened History)
  */
@@ -269,6 +311,7 @@ fun TransactionLogList(
     itemToDelete?.let { purchase ->
         DeleteConfirmationDialog(
             itemName = purchase.itemName,
+            warningMessage = "This will permanently remove this transaction from your history.",
             onDismiss = { itemToDelete = null },
             onConfirm = {
                 viewModel.deleteTransaction(purchase.id, purchase.roomId)
@@ -291,31 +334,60 @@ fun TaskHistoryList(
     var taskToReport by remember { mutableStateOf<Task?>(null) }
     var taskToDelete by remember { mutableStateOf<Task?>(null) }
 
-    if (uiState.tasks.isEmpty() && !uiState.isLoading) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("No history found.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-    } else {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().background(Color.Gray.copy(alpha = 0.1f)),
-            contentPadding = PaddingValues(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            // KEY FIX: This matches ManageSelfTasks screen
-            items(items = uiState.tasks, key = { it.id }) { task ->
-                TaskLogItem(
-                    task = task,
-                    onLongPress = { taskToReport = task },
-                    onDeleteClick = { taskToDelete = task }
+
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        // --- NEW: Clear All Button (Only shows if there are completed tasks) ---
+        val hasHistory = uiState.tasks.any { it.status != "assigned" }
+        if (hasHistory) {
+            TextButton(
+                onClick = { viewModel.clearAllTaskHistory() },
+                modifier = Modifier.align(Alignment.End)
+                    .padding(horizontal = 16.dp, vertical = 4.dp)
+            ) {
+                Icon(
+                    Icons.Default.DeleteSweep,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
                 )
+                Spacer(Modifier.width(8.dp))
+                Text("Clear Completed Logs", color = MaterialTheme.colorScheme.error)
+            }
+        }
+
+        if (uiState.tasks.isEmpty() && !uiState.isLoading) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("No history found.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize().background(Color.Gray.copy(alpha = 0.1f)),
+                contentPadding = PaddingValues(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                // KEY FIX: This matches ManageSelfTasks screen
+                items(items = uiState.tasks, key = { it.id }) { task ->
+                    TaskLogItem(
+                        task = task,
+                        onLongPress = { taskToReport = task },
+                        onDeleteClick = { taskToDelete = task }
+                    )
+                }
             }
         }
     }
 
-    // Dialogs...
+
+    // --- Delete Confirmation Logic with Warning ---
     taskToDelete?.let { task ->
+        val isActive = task.status == "assigned"
+
         DeleteConfirmationDialog(
             itemName = task.title,
+            // Passing the message here
+            warningMessage = if (isActive)
+                "WARNING: This is an ACTIVE task. Deleting it will stop it from repeating!"
+            else "This will permanently remove this historical record.",
             onDismiss = { taskToDelete = null },
             onConfirm = {
                 viewModel.deleteTask(task.id)
@@ -330,19 +402,30 @@ fun TaskHistoryList(
  */
 @Composable
 fun TaskLogItem(task: Task, onLongPress: () -> Unit, onDeleteClick: () -> Unit) {
+    val isDone = task.status == "completed" || task.status == "verified"
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .pointerInput(Unit) { detectTapGestures(onLongPress = { onLongPress() }) }
+            // USE ISDONE HERE: Dim the card if it's already completed
+            .alpha(if (isDone) 0.6f else 1f)
+            .pointerInput(Unit) {
+                detectTapGestures(onLongPress = { onLongPress() })
+            },
+        // Optional: Change card elevation for completed items
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isDone) 0.dp else 2.dp)
     ) {
         Row(
             modifier = Modifier.padding(16.dp).fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(task.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Text("Points: ${task.points}", style = MaterialTheme.typography.bodyMedium)
-                Text("Repeats: ${task.repeatOption ?: "Never"}", style = MaterialTheme.typography.bodySmall)
+                Text(task.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,textDecoration = if (isDone) androidx.compose.ui.text.style.TextDecoration.LineThrough else null)
+                if (isDone) {
+                    Text("Status: Completed", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                } else {
+                    Text("Points: ${task.points}", style = MaterialTheme.typography.bodyMedium)
+                    Text("Repeats: ${task.repeatOption ?: "Never"}", style = MaterialTheme.typography.bodySmall)
+                }
             }
             IconButton(onClick = onDeleteClick) {
                 Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
@@ -446,18 +529,7 @@ fun IconSelector(userProfile: UserProfile?, selectedIconId: String, onIconSelect
     }
 }
 
-@Composable
-fun DeleteConfirmationDialog(itemName: String, onDismiss: () -> Unit, onConfirm: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Delete Item") },
-        text = { Text("Are you sure you want to delete '$itemName'? This will permanently remove this item.") },
-        confirmButton = {
-            TextButton(onClick = onConfirm, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Text("Delete") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
-    )
-}
+
 
 private fun formatTimestamp(timestamp: Timestamp): String {
     return SimpleDateFormat("MMM dd, yyyy", Locale.getDefault()).format(timestamp.toDate())

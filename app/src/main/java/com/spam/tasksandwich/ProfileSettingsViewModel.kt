@@ -111,24 +111,90 @@ class ProfileSettingsViewModel : ViewModel() {
         // 3. Assigned Tasks
         db.collection("tasks").whereEqualTo("assignedToUserId", uid)
             .orderBy("createdAt", Query.Direction.DESCENDING)
-            .addSnapshotListener { snapshot, _ ->
+            .addSnapshotListener { snapshot, error ->
                 if (snapshot != null) {
                     tasksCache = snapshot.documents.mapNotNull { doc ->
                         doc.toObject(Task::class.java)?.copy(id = doc.id)
                     }
+                    // Trigger the new filtered UI logic
                     updateTasksUi()
                 }
-                tasksLoaded = true; checkCompletion()
+                tasksLoaded = true
+                checkCompletion()
             }
     }
 
     private fun updateTasksUi() {
-        _uiState.update { it.copy(tasks = tasksCache) }
+        // 1. Calculate "Midnight Tomorrow" (The same logic as HomeViewModel)
+        val cal = java.util.Calendar.getInstance()
+        cal.add(java.util.Calendar.DAY_OF_YEAR, 1)
+        cal.set(java.util.Calendar.HOUR_OF_DAY, 0)
+        cal.set(java.util.Calendar.MINUTE, 0)
+        cal.set(java.util.Calendar.SECOND, 0)
+        cal.set(java.util.Calendar.MILLISECOND, 0)
+        val tomorrowMidnight = cal.time
+
+        // 2. Filter the cache
+        val filteredTasks = tasksCache.filter { task ->
+            val due = task.dueDate?.toDate()
+
+            // RULE A: If the task is already DONE (completed/verified), always show it in History.
+            if (task.status == "completed" || task.status == "verified") {
+                return@filter true
+            }
+
+            // RULE B: If the task is ASSIGNED (Active), only show it if it has "Popped up"
+            // (Due Today or in the Past). Hide if it's due Tomorrow or later.
+            val isDueTodayOrPast = due == null || due.before(tomorrowMidnight)
+
+            task.status == "assigned" && isDueTodayOrPast
+        }
+
+        _uiState.update { it.copy(tasks = filteredTasks) }
     }
 
     private fun updateHistoryUi() {
         _uiState.update { it.copy(purchaseHistory = historyCache) }
     }
+
+    /**
+     * Deletes all COMPLETED or VERIFIED task records for this user.
+     * This is the "Clean Up" logic.
+     */
+    fun clearAllTaskHistory() { // is a clear not a "delete live data" so if task repeats its more of a clear list
+        val uid = currentUser?.uid ?: return
+
+        // 1. OPTIMISTIC UPDATE:
+        // Filter the local cache to keep ONLY 'assigned' tasks.
+        // This makes all the "faded/completed" items vanish from the screen instantly.
+        tasksCache = tasksCache.filter { it.status == "assigned" }
+
+        // Push the new filtered cache to the UI State
+        updateTasksUi()
+
+        viewModelScope.launch {
+            try {
+                // Find only the old logs (not the active 'assigned' ones)
+                val snapshot = db.collection("tasks")
+                    .whereEqualTo("assignedToUserId", uid)
+                    .whereIn("status", listOf("completed", "verified"))
+                    .get().await()
+
+                if (snapshot.isEmpty) return@launch
+
+                val batch = db.batch()
+                snapshot.documents.forEach { batch.delete(it.reference) }
+                batch.commit().await()
+
+                // The SnapshotListener will automatically update the UI list
+                Log.d("DELETE", "Successfully cleared all historical logs")
+            } catch (e: Exception) {
+                Log.e("DELETE", "Failed to clear history: ${e.message}")
+            }
+        }
+    }
+
+
 
     /**
      * DELETE TASK: Uses OPTIMISTIC UPDATE
