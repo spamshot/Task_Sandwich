@@ -16,10 +16,12 @@ data class ShopItem(
  */
 data class PurchaseLogItem(
     val id: String = "",
+    val itemId: String = "",
     val itemName: String = "",
     val itemCost: Int = 0,
     val purchasedByUserId: String = "",
     val purchasedByUserName: String = "",
+    val purchasedAt: com.google.firebase.Timestamp? = null,
     val status: String = "pending",
     val mysteryText: String = "",
     val roomId: String = "",

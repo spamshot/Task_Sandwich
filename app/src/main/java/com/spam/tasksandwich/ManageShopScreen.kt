@@ -45,7 +45,7 @@ fun ManageShopScreen(
             item = ShopItem(name = "", cost = 0, mysteryText = ""), // Use your field name
             onDismiss = { showAddItemDialog = false },
             onConfirm = { newName, newCost, newMysteryText, newAutoRedeem ->
-                viewModel.saveShopItem(newName, newCost, newMysteryText, newAutoRedeem)
+                viewModel.addShopItem(newName, newCost, newMysteryText, newAutoRedeem)
                 showAddItemDialog = false
             },
             isCreating = true
@@ -100,7 +100,7 @@ fun ManageShopScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        viewModel.clearHistory()
+                        viewModel.clearRoomHistory()
                         showClearHistoryDialog = false
                     },
                     colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
@@ -166,7 +166,7 @@ fun PendingPurchasesList(purchases: List<PurchaseLogItem>, viewModel: ManageShop
             items(items = purchases, key = { it.id }) { purchase ->
                 PendingPurchaseCard(
                     purchase = purchase,
-                    onApprove = { viewModel.approvePurchase(purchase) },
+                    onApprove = { viewModel.completePurchase(purchase) },
                     onRefund = { viewModel.refundPurchase(purchase) }
                 )
             }
