@@ -29,7 +29,8 @@ data class ManageShopUiState(
     val pendingPurchases: List<PurchaseLogItem> = emptyList(),
     val purchaseHistory: List<PurchaseLogItem> = emptyList(),
     val saveSuccess: Boolean = false,
-    val error: String? = null
+    val error: String? = null,
+    val roomName: String = ""
 )
 
 
@@ -116,6 +117,15 @@ class ManageShopViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
                     }
                 } else {
                     historyLoaded = true; checkCompletion()
+                }
+            }
+
+        //Listen for room name
+        db.collection("groups").document(roomId)
+            .addSnapshotListener { snapshot, _ ->
+                if (snapshot != null && snapshot.exists()) {
+                    val name = snapshot.getString("name") ?: "Room"
+                    _uiState.update { it.copy(roomName = name) }
                 }
             }
     }

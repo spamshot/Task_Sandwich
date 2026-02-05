@@ -360,11 +360,10 @@ fun TaskItem(task: Task, onCompleteClick: () -> Unit) {
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(task.title, style = MaterialTheme.typography.bodyLarge)
-            Text(
-                "${task.points} Points",
+
+            Text("${task.points} Points",
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.primary
-            )
+                color = MaterialTheme.colorScheme.primary)
             CountdownTimer(dueDate = task.dueDate)
         }
         Button(onClick = onCompleteClick) {
@@ -374,7 +373,7 @@ fun TaskItem(task: Task, onCompleteClick: () -> Unit) {
 }
 
 @Composable
-fun CountdownTimer(dueDate: Timestamp?) {
+fun CountdownTimer(dueDate: Timestamp?) { //todo time isn't right
     if (dueDate == null) return
     var now by remember { mutableStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) {

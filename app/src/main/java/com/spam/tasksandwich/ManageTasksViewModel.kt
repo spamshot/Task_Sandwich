@@ -30,6 +30,7 @@ data class AutoAssignTaskTemplate(
 data class ManageTasksUiState(
     val isLoading: Boolean = true,
     val isSaving: Boolean = false,
+    val roomName: String = "",
     val members: List<RoomMember> = emptyList(),
     val autoAssignTemplates: List<AutoAssignTaskTemplate> = emptyList(),
     val repeatingTasks: List<Task> = emptyList(),
@@ -60,21 +61,32 @@ class ManageTasksViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
 
         _uiState.update { it.copy(isLoading = true) }
 
-        // HomeViewModel Pattern: Tracking multiple listeners
+        // PATTERN: Flags to ensure the loading wheel only stops when all data is ready
+        var roomLoaded = false
         var membersLoaded = false
         var tasksLoaded = false
         var templatesLoaded = false
 
         fun checkCompletion() {
-            if (membersLoaded && tasksLoaded && templatesLoaded) {
+            if (roomLoaded && membersLoaded && tasksLoaded && templatesLoaded) {
                 _uiState.update { it.copy(isLoading = false) }
             }
         }
 
-        // 1. Listen for Members
+        // 1. LISTEN FOR ROOM NAME (For the Header)
+        db.collection("groups").document(roomId)
+            .addSnapshotListener { snapshot, _ ->
+                if (snapshot != null && snapshot.exists()) {
+                    _uiState.update { it.copy(roomName = snapshot.getString("name") ?: "Room") }
+                }
+                roomLoaded = true
+                checkCompletion()
+            }
+
+        // 2. LISTEN FOR MEMBERS
         db.collection("groups").document(roomId).collection("groupMembers")
             .orderBy("joinedAt", Query.Direction.ASCENDING)
-            .addSnapshotListener { snapshot, error ->
+            .addSnapshotListener { snapshot, _ ->
                 if (snapshot != null) {
                     viewModelScope.launch {
                         val memberJobs = snapshot.documents.map { memberDoc ->
@@ -96,28 +108,32 @@ class ManageTasksViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
                 }
             }
 
-        // 2. Listen for Assigned Tasks (THE FIX: No date filtering)
+        // 3. LISTEN FOR ASSIGNED TASKS (With Grouping Logic)
         db.collection("tasks")
             .whereEqualTo("groupId", roomId)
-            .whereEqualTo("status", "assigned") // We only want the active ones
+            .whereEqualTo("status", "assigned")
             .orderBy("createdAt", Query.Direction.DESCENDING)
             .addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    Log.e("ManageTasksVM", "Task listener error: ${error.message}")
-                    tasksLoaded = true; checkCompletion()
-                    return@addSnapshotListener
-                }
-
                 if (snapshot != null) {
                     allTasksCache = snapshot.documents.mapNotNull { doc ->
                         doc.toObject(Task::class.java)?.copy(id = doc.id)
                     }
 
-                    // Immediately update UI lists based on the cache
+                    // --- GROUPING LOGIC ---
+                    // Group tasks by their sharedTaskId (or their own ID if unique)
+                    val grouped = allTasksCache.groupBy { it.sharedTaskId ?: it.id }
+
+                    // Create representative tasks that hold the list of all assignee names
+                    val displayTasks = grouped.map { (_, tasksInGroup) ->
+                        val representative = tasksInGroup.first()
+                        val names = tasksInGroup.mapNotNull { it.assignedToName }.distinct()
+                        representative.copy(assigneeNames = names)
+                    }
+
                     _uiState.update { currentState ->
                         currentState.copy(
-                            repeatingTasks = allTasksCache.filter { it.repeatOption != "Never" && it.repeatOption != null },
-                            oneTimeTasks = allTasksCache.filter { it.repeatOption == "Never" || it.repeatOption == null }
+                            repeatingTasks = displayTasks.filter { it.repeatOption != "Never" },
+                            oneTimeTasks = displayTasks.filter { it.repeatOption == "Never" }
                         )
                     }
                 }
@@ -125,10 +141,10 @@ class ManageTasksViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
                 checkCompletion()
             }
 
-        // 3. Listen for Auto-Assign Templates
+        // 4. LISTEN FOR AUTO-ASSIGN TEMPLATES
         db.collection("groups").document(roomId).collection("autoAssignTemplates")
             .orderBy("createdAt", Query.Direction.DESCENDING)
-            .addSnapshotListener { snapshot, error ->
+            .addSnapshotListener { snapshot, _ ->
                 if (snapshot != null) {
                     val templates = snapshot.documents.mapNotNull { doc ->
                         AutoAssignTaskTemplate(
@@ -258,7 +274,8 @@ class ManageTasksViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
                         "isPersonal" to task.isPersonal,
                         "sharedTaskId" to task.sharedTaskId,
                         "createdAt" to task.createdAt,
-                        "dueDate" to task.dueDate
+                        "dueDate" to task.dueDate,
+                        "assignedToName" to task.assignedToName // SAVE NAME HERE
                     )
                     batch.set(docRef, taskData)
                 }

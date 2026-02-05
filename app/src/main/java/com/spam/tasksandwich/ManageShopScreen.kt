@@ -42,6 +42,7 @@ fun ManageShopScreen(
     // The "Add New Item" dialog is now triggered by the FAB
     if (showAddItemDialog) {
         EditShopItemDialog(
+            roomName = uiState.roomName,
             item = ShopItem(name = "", cost = 0, mysteryText = ""), // Use your field name
             onDismiss = { showAddItemDialog = false },
             onConfirm = { newName, newCost, newMysteryText, newAutoRedeem ->
@@ -82,6 +83,7 @@ fun ManageShopScreen(
     }
     if (itemToEdit != null) {
         EditShopItemDialog(
+            roomName = uiState.roomName,
             item = itemToEdit!!,
             onDismiss = { itemToEdit = null },
             // --- RENAMED: 'updatedMysteryText' ---
@@ -283,10 +285,12 @@ fun ShopItemLogItem(item: ShopItem, onLongPress: () -> Unit) {
 
 @Composable
 fun EditShopItemDialog(
+    roomName: String,
     item: ShopItem,
     onDismiss: () -> Unit,
     onConfirm: (String, String, String, Boolean) -> Unit,
-    isCreating: Boolean = false
+    isCreating: Boolean = false,
+
 ) {
     var editName by remember { mutableStateOf(item.name) }
     var editCost by remember { mutableStateOf(item.cost.toString()) }
@@ -300,6 +304,8 @@ fun EditShopItemDialog(
         title = { Text(if (isCreating) "Add New Item" else "Edit Item") },
         text = {
             Column {
+                Text("Room: $roomName")
+                Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
                     value = editName,
                     onValueChange = { editName = it },

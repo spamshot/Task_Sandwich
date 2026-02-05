@@ -333,6 +333,7 @@ fun TaskHistoryList(
 ) {
     var taskToReport by remember { mutableStateOf<Task?>(null) }
     var taskToDelete by remember { mutableStateOf<Task?>(null) }
+    val context = LocalContext.current
 
 
 
@@ -369,12 +370,29 @@ fun TaskHistoryList(
                 items(items = uiState.tasks, key = { it.id }) { task ->
                     TaskLogItem(
                         task = task,
-                        onLongPress = { taskToReport = task },
+                        onLongPress = { taskToReport = task  },
                         onDeleteClick = { taskToDelete = task }
                     )
                 }
             }
         }
+    }
+
+    taskToReport?.let { task ->
+        ReportDialog(
+            itemContent = "Task Title: ${task.title}",
+            onDismiss = { taskToReport = null },
+            onConfirm = {
+                reportsViewModel.sendReportToFirebase(
+                    reporterId = uiState.userProfile?.uid ?: "unknown",
+                    reportedContent = task.title,
+                    reportType = "task_title",
+                    roomId = task.groupId ?: ""
+                )
+                Toast.makeText(context, "Report Sent", Toast.LENGTH_SHORT).show()
+                taskToReport = null
+            }
+        )
     }
 
 

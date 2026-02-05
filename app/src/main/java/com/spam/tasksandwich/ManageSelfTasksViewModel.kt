@@ -119,7 +119,8 @@ class ManageSelfTasksViewModel : ViewModel() {
                     "isPersonal" to true,
                     "assignedToUserId" to currentUser.uid,
                     "assignedByUserId" to currentUser.uid,
-                    "assignedByName" to userName
+                    "assignedByName" to userName,
+                    "assignedToName" to userName
                     // Note: dueDate is null by default here, which means "Start Now"
                 )
 

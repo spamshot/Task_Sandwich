@@ -125,6 +125,16 @@ fun AssignTaskForm(uiState: ManageTasksUiState, viewModel: ManageTasksViewModel)
                 .padding(12.dp)
                 .verticalScroll(rememberScrollState()),
         ) {
+            Text(
+                text = uiState.roomName,
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.ExtraBold,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp)
+            )
+
             OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Task Name") }, modifier = Modifier.fillMaxWidth())
             Spacer(Modifier.height(16.dp))
             OutlinedTextField(value = points, onValueChange = { points = it }, label = { Text("Points") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth())
@@ -399,7 +409,6 @@ fun AssignedTasksList(uiState: ManageTasksUiState, viewModel: ManageTasksViewMod
                     val representativeTask = tasks.first()
                     AssignedTaskCard(
                         task = representativeTask,
-                        assignedCount = tasks.size,
                         onDelete = { viewModel.deleteTaskGroup(tasks) }
                     )
                 }
@@ -426,7 +435,6 @@ fun AssignedTasksList(uiState: ManageTasksUiState, viewModel: ManageTasksViewMod
                     val representativeTask = tasks.first()
                     AssignedTaskCard(
                         task = representativeTask,
-                        assignedCount = tasks.size,
                         onDelete = { viewModel.deleteTaskGroup(tasks) }
                     )
                 }
@@ -454,8 +462,11 @@ fun AutoAssignTaskCard(template: AutoAssignTaskTemplate, onDelete: () -> Unit) {
 }
 
 @Composable
-fun AssignedTaskCard(task: Task, assignedCount: Int, onDelete: () -> Unit) { //Task Card for Assigned Tasks
-    Card(modifier = Modifier.fillMaxWidth()) {
+fun AssignedTaskCard(task: Task, onDelete: () -> Unit,) { //Task Card for Assigned Tasks
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ){
         Column(Modifier.padding(12.dp)) {
             Text(task.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Text("Points: ${task.points}", style = MaterialTheme.typography.bodyMedium)
@@ -463,12 +474,29 @@ fun AssignedTaskCard(task: Task, assignedCount: Int, onDelete: () -> Unit) { //T
             task.dueDate?.let {
                 Text("Expires: ${formatTimestamp(it)}", style = MaterialTheme.typography.bodyMedium)
             }
-            Text("Assigned to: ${if (assignedCount > 1) "$assignedCount members" else "1 member"}", style = MaterialTheme.typography.bodyMedium)
+            Text(
+                text = getAssigneeText(task.assigneeNames),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
                 OutlinedButton(onClick = onDelete) { Text("Cancel Task") }
             }
         }
+    }
+}
+
+fun getAssigneeText(names: List<String>): String {
+    if (names.isEmpty()) return "Assigned to: Unknown"
+
+    val firstThree = names.take(3).joinToString(", ")
+    return if (names.size > 3) {
+        "Assigned to: $firstThree + ${names.size - 3} more"
+    } else {
+        "Assigned to: $firstThree"
     }
 }
 
