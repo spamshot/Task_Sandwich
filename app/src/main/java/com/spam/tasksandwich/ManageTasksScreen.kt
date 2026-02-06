@@ -317,7 +317,9 @@ fun AssignTaskForm(uiState: ManageTasksUiState, viewModel: ManageTasksViewModel)
                 modifier = Modifier.fillMaxWidth()
             ) {
                 if (uiState.isSaving) CircularProgressIndicator(Modifier.size(24.dp)) else Text("Save Task")
+
             }
+            Spacer(Modifier.padding(bottom = 16.dp))
         }
     }
 }
@@ -490,11 +492,17 @@ fun AssignedTaskCard(task: Task, onDelete: () -> Unit,) { //Task Card for Assign
 }
 
 fun getAssigneeText(names: List<String>): String {
-    if (names.isEmpty()) return "Assigned to: Unknown"
+    // If names is empty, it means the ViewModel grouping logic
+    // is still processing the snapshot or pulling from the DB.
+    if (names.isEmpty()) {
+        return "Assigned to: Loading..."
+    }
 
-    val firstThree = names.take(3).joinToString(", ")
-    return if (names.size > 3) {
-        "Assigned to: $firstThree + ${names.size - 3} more"
+    val sortedNames = names.sorted()
+    val firstThree = sortedNames.take(3).joinToString(", ")
+
+    return if (sortedNames.size > 3) {
+        "Assigned to: $firstThree + ${sortedNames.size - 3} more"
     } else {
         "Assigned to: $firstThree"
     }

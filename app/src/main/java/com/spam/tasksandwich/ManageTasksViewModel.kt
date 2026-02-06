@@ -114,24 +114,44 @@ class ManageTasksViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
             .whereEqualTo("status", "assigned")
             .orderBy("createdAt", Query.Direction.DESCENDING)
             .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    Log.e("ManageTasksVM", "Task listener error: ${error.message}")
+                    tasksLoaded = true; checkCompletion()
+                    return@addSnapshotListener
+                }
+
                 if (snapshot != null) {
+                    // 1. Map documents to objects AND force the ID and Name mapping
                     allTasksCache = snapshot.documents.mapNotNull { doc ->
-                        doc.toObject(Task::class.java)?.copy(id = doc.id)
+                        val task = doc.toObject(Task::class.java)
+                        task?.copy(
+                            id = doc.id,
+                            // FORCE pull the name string directly from the doc.
+                            // This is the fastest way to get the data into the UI.
+                            assignedToName = doc.getString("assignedToName") ?: ""
+                        )
                     }
 
-                    // --- GROUPING LOGIC ---
-                    // Group tasks by their sharedTaskId (or their own ID if unique)
+                    // 2. GROUPING LOGIC
+                    // Group tasks by their sharedTaskId (or their own ID if it's a unique assignment)
                     val grouped = allTasksCache.groupBy { it.sharedTaskId ?: it.id }
 
-                    // Create representative tasks that hold the list of all assignee names
+                    // 3. TRANSFORM to UI Representative
                     val displayTasks = grouped.map { (_, tasksInGroup) ->
                         val representative = tasksInGroup.first()
-                        val names = tasksInGroup.mapNotNull { it.assignedToName }.distinct()
+
+                        // Collect all unique, non-blank names assigned to this task group
+                        val names = tasksInGroup.mapNotNull { it.assignedToName }
+                            .filter { it.isNotBlank() }
+                            .distinct()
+
                         representative.copy(assigneeNames = names)
                     }
 
+                    // 4. Update UI state
                     _uiState.update { currentState ->
                         currentState.copy(
+                            isLoading = false,
                             repeatingTasks = displayTasks.filter { it.repeatOption != "Never" },
                             oneTimeTasks = displayTasks.filter { it.repeatOption == "Never" }
                         )
@@ -226,6 +246,7 @@ class ManageTasksViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
                 points = points,
                 repeatOption = repeatOption,
                 groupId = roomId,
+                assignedToName = member.name,
                 assignedToUserId = member.userId,
                 assignedByUserId = currentUser.uid,
                 assignedByName = adminName,

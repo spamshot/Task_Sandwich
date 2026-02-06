@@ -79,7 +79,7 @@ dependencies {
     implementation("androidx.navigation:navigation-compose:2.9.7")
 
     // Firebase Bill of Materials (BoM) - This handles versions for other Firebase libs
-    implementation(platform("com.google.firebase:firebase-bom:34.8.0"))
+    implementation(platform("com.google.firebase:firebase-bom:34.9.0"))
 
     implementation("com.google.firebase:firebase-functions:22.1.0")
     implementation("com.google.firebase:firebase-appcheck-playintegrity")

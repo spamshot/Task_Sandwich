@@ -436,6 +436,7 @@ fun MemberListItem(
             Row(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = onNavigateToManageTasks, modifier = Modifier.weight(1f)) { Text("Manage Tasks") }
                 Button(onClick = onCreateShopClick, modifier = Modifier.weight(1f)) { Text("Manage Shop") }
+                Spacer(Modifier.padding(bottom = 16.dp))
             }
         }
     }

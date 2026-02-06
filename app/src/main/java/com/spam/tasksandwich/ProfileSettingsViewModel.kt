@@ -260,26 +260,41 @@ class ProfileSettingsViewModel : ViewModel() {
 
         viewModelScope.launch {
             try {
-                // 1. Wipe the Firestore user document
-                db.collection("users").document(user.uid).delete().await()
+                val uid = user.uid
 
-                // 2. Wipe the Auth account (triggers background server cleanup)
+                // 1. Delete the Firestore User Document
+                // (Must be done while still authenticated)
+                db.collection("users").document(uid).delete().await()
+
+                // 2. Delete the Auth account
                 user.delete().await()
 
-                // 3. MANDATORY LOGOUT
-                // Explicitly sign out to clear local caches and listeners
-                auth.signOut()
-                _uiState.update { it.copy(logoutSuccess = true) }
+                // 3. SUCCESS PATH: Call your existing logout()
+                // This handles auth.signOut() AND logoutSuccess = true
+                logout()
 
-                // 4. Navigate away
-                _uiState.update { it.copy(isSaving = false, logoutSuccess = true) }
+                Log.d("DELETE_ACCOUNT", "User wiped and logged out")
+
             } catch (e: Exception) {
-                val errorMessage = if (e.message?.contains("recent-login") == true) {
-                    "Security check failed. Please log out and log back in before deleting."
+                Log.e("DELETE_ACCOUNT", "Error", e)
+
+                if (e.message?.contains("recent-login") == true) {
+                    // SECURITY CASE: STOP HERE.
+                    // Do NOT call logout() because the user needs to stay logged in
+                    // to re-authenticate as per Google's security policy.
+                    _uiState.update {
+                        it.copy(
+                            isSaving = false,
+                            error = "Please logout and log back in to verify your identity, then try deleting again."
+                        )
+                    }
                 } else {
-                    e.message ?: "Account deletion failed."
+                    // FALLBACK: For any other error (like the user is already partially deleted),
+                    // just call logout() to get them back to the start screen.
+                    logout()
                 }
-                _uiState.update { it.copy(isSaving = false, error = errorMessage) }
+            } finally {
+                _uiState.update { it.copy(isSaving = false) }
             }
         }
     }

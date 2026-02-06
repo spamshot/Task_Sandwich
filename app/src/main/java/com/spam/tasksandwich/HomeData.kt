@@ -41,8 +41,8 @@ data class Task(
     val isPersonal: Boolean = false,
     val isArchived: Boolean = false,
     val createdAt: Timestamp? = null,
-    val assigneeNames: List<String> = emptyList(),
     val assignedToName: String? = null,
+    val assigneeNames: List<String> = emptyList()
 )
 
 /**

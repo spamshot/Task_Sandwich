@@ -145,7 +145,11 @@ fun ProfileSettingsForm(uiState: ProfileSettingsUiState, viewModel: ProfileSetti
             text = { Text("Are you sure? This will permanently delete your profile, points, and account. This action cannot be undone.") },
             confirmButton = {
                 TextButton(
-                    onClick = { viewModel.deleteAccount(); showDeleteDialog = false },
+                    onClick = {
+                        viewModel.deleteAccount();showDeleteDialog = false;
+//                        viewModel.logout()
+
+                              },
                     colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                 ) { Text("Delete Everything") }
             },

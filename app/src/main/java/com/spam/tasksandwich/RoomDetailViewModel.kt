@@ -81,7 +81,6 @@ class RoomDetailViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
             _uiState.update { it.copy(currentUserId = auth.currentUser?.uid ?: "") }
             fetchCurrentUserRole()
             listenToRoomAndUser()
-//            fetchRoomDetails()
             listenForMembers()
             listenForTasks()
             listenForTopTasks()
@@ -217,6 +216,7 @@ class RoomDetailViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
 
     fun toggleRoomLock(currentlyLocked: Boolean) {
         viewModelScope.launch {
+            Log.d("RoomLock", "Toggling lock button clicked")
             try {
                 db.collection("groups").document(roomId)
                     .update("isLocked", !currentlyLocked)
@@ -269,8 +269,9 @@ class RoomDetailViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
                             )
                         }
 
-                        // --- AUTO-UNLOCK LOGIC ---
+                        // --- AUTO-UNLOCK LOGIC --- Tested it works, not making the bug
                         if (memberList.size < 3 && _uiState.value.isLocked) {
+                            Log.d("RoomLock", "Auto-unlocking room due to member count.${memberList.size}")
                             try {
                                 db.collection("groups").document(roomId)
                                     .update("isLocked", false)

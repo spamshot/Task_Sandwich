@@ -65,13 +65,10 @@ class AppShellViewModel : ViewModel() {
             _uiState.update { it.copy(error = "You must be logged in to join a room.") }
             return
         }
-        if (joinCode.length != 6) {
-            _uiState.update { it.copy(error = "Please enter a valid 6-digit code.") }
-            return
-        }
 
         viewModelScope.launch {
             try {
+                // 1. Find the group
                 val groupQuery = db.collection("groups")
                     .whereEqualTo("joinCode", joinCode)
                     .limit(1)
@@ -87,22 +84,12 @@ class AppShellViewModel : ViewModel() {
                 val groupId = groupDoc.id
                 val groupRef = db.collection("groups").document(groupId)
 
+                // --- NEW: FETCH JOINING USER'S NAME ---
+                val userDoc = db.collection("users").document(currentUser.uid).get().await()
+                val joiningUserName = userDoc.getString("name") ?: "New Member"
+                // --------------------------------------
+
                 val templatesSnapshot = groupRef.collection("autoAssignTemplates").get().await()
-
-                val memberCountQuery = groupRef.collection("groupMembers").count().get(com.google.firebase.firestore.AggregateSource.SERVER).await()
-                val currentMemberCount = memberCountQuery.count
-
-                if (currentMemberCount >= 30) {
-                    _uiState.update { it.copy(error = "This room is full (Max 30 members).") }
-                    return@launch
-                }
-
-                val isLocked = groupDoc.getBoolean("isLocked") ?: false // Get the lock status
-
-                if (isLocked) {
-                    _uiState.update { it.copy(error = "This room is locked by the admin. You cannot join at this time.") }
-                    return@launch // STOP HERE - Don't run the batch join logic
-                }
 
                 val adminId = groupDoc.getString("adminUserId")
                 var adminName = "Admin"
@@ -115,34 +102,41 @@ class AppShellViewModel : ViewModel() {
 
                 val batch = db.batch()
 
+                // Member Record
                 val memberRef = groupRef.collection("groupMembers").document(currentUser.uid)
-                val newMemberData = hashMapOf(
+                batch.set(memberRef, hashMapOf(
                     "userId" to currentUser.uid,
                     "role" to "member",
                     "status" to "approved",
                     "totalPointsInGroup" to 0,
                     "joinedAt" to Timestamp.now()
-                )
-                batch.set(memberRef, newMemberData)
+                ))
 
+                // User Record
                 val userRef = db.collection("users").document(currentUser.uid)
-                val roomInfo = hashMapOf(
+                batch.update(userRef, "groupsJoined", FieldValue.arrayUnion(hashMapOf(
                     "groupId" to groupId,
                     "groupName" to groupDoc.getString("name")
-                )
-                batch.update(userRef, "groupsJoined", FieldValue.arrayUnion(roomInfo))
+                )))
 
+                // --- UPDATED TASK CREATION LOOP ---
                 templatesSnapshot.documents.forEach { templateDoc ->
                     val newTaskRef = db.collection("tasks").document()
-                    val taskData = templateDoc.data!!
+                    val taskData = templateDoc.data!!.toMutableMap()
 
                     taskData["groupId"] = groupId
                     taskData["assignedToUserId"] = currentUser.uid
+                    // THE FIX: Save the joining user's name so Admin can see it
+                    taskData["assignedToName"] = joiningUserName
                     taskData["assignedByUserId"] = adminId
                     taskData["assignedByName"] = adminName
                     taskData["status"] = "assigned"
                     taskData["isPersonal"] = false
                     taskData["createdAt"] = Timestamp.now()
+                    // If these are auto-assigned, they are unique to the user,
+                    // so we don't necessarily need a sharedTaskId,
+                    // but we can set it to the task ID for consistency.
+                    taskData["sharedTaskId"] = newTaskRef.id
 
                     val expiresInDays = templateDoc.getLong("expiresInDays")?.toInt() ?: 0
                     if (expiresInDays > 0) {
@@ -155,7 +149,6 @@ class AppShellViewModel : ViewModel() {
                 }
 
                 batch.commit().await()
-
                 _uiState.update { it.copy(newlyJoinedRoomId = groupId, error = null) }
 
             } catch (e: Exception) {
