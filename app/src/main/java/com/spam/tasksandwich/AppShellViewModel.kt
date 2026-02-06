@@ -84,6 +84,28 @@ class AppShellViewModel : ViewModel() {
                 val groupId = groupDoc.id
                 val groupRef = db.collection("groups").document(groupId)
 
+                // ============================================================
+                // --- THE GATEKEEPER: CHECK IF ROOM IS LOCKED ---
+                // ============================================================
+                val isLocked = groupDoc.getBoolean("isLocked") ?: false
+
+                if (isLocked) {
+                    _uiState.update { it.copy(error = "This room is locked by the admin. No new members can join.") }
+                    return@launch // STOP HERE: Do not run the join logic below
+                }
+                // ============================================================
+
+                // --- OPTIONAL: CHECK FOR MAX 25 MEMBERS ---
+                val memberCountQuery = groupRef.collection("groupMembers").count()
+                    .get(com.google.firebase.firestore.AggregateSource.SERVER).await()
+                if (memberCountQuery.count >= 25) {
+                    _uiState.update { it.copy(error = "This room is full (Max 25 members).") }
+                    return@launch
+                }
+                // ============================================================
+
+
+
                 // --- NEW: FETCH JOINING USER'S NAME ---
                 val userDoc = db.collection("users").document(currentUser.uid).get().await()
                 val joiningUserName = userDoc.getString("name") ?: "New Member"

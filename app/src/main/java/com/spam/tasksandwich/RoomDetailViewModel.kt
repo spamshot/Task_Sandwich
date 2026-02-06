@@ -132,29 +132,33 @@ class RoomDetailViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
 
     private fun listenToRoomAndUser() {
         val currentUserId = auth.currentUser?.uid ?: return
+
+        // 1. Listen to the ROOM (For Name, Code, and LOCK status)
         db.collection("groups").document(roomId)
             .addSnapshotListener { snapshot, error ->
                 if (snapshot != null && snapshot.exists()) {
                     val globalCensored = snapshot.get("censoredUserIds") as? List<String> ?: emptyList()
 
+                    // --- THE FIX IS THESE TWO LINES ---
+                    val lockStatus = snapshot.getBoolean("isLocked") ?: false
+                    // ----------------------------------
+
                     _uiState.update { it.copy(
-                        roomName = snapshot.getString("name") ?: "Room",
+                        roomName = snapshot.getString("name") ?: "",
                         joinCode = snapshot.getString("joinCode") ?: "------",
-                        isLocked = snapshot.getBoolean("isLocked") ?: false, // Listen for lock status
+                        isLocked = lockStatus, // --- AND UPDATING THIS HERE ---
                         globallyCensoredUserIds = globalCensored
                     ) }
+                    Log.d("LOCK_DEBUG", "Listener received isLocked: $lockStatus")
                 }
             }
 
-        // Listen to the CURRENT USER (For Local Censorship)
+        // 2. Listen to the CURRENT USER (For Local Censorship)
         db.collection("users").document(currentUserId)
             .addSnapshotListener { snapshot, error ->
                 if (snapshot != null && snapshot.exists()) {
                     val localCensored = snapshot.get("locallyCensoredUserIds") as? List<String> ?: emptyList()
-
-                    _uiState.update { it.copy(
-                        locallyCensoredUserIds = localCensored
-                    ) }
+                    _uiState.update { it.copy(locallyCensoredUserIds = localCensored) }
                 }
             }
     }
@@ -216,13 +220,18 @@ class RoomDetailViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
 
     fun toggleRoomLock(currentlyLocked: Boolean) {
         viewModelScope.launch {
-            Log.d("RoomLock", "Toggling lock button clicked")
             try {
+                // This updates Firestore
                 db.collection("groups").document(roomId)
                     .update("isLocked", !currentlyLocked)
                     .await()
+
+                // We don't need to manually update _uiState here because
+                // listenToRoomAndUser() will catch the change and update it for us.
+                Log.d("LOCK_DEBUG", "Successfully toggled lock to: ${!currentlyLocked}")
             } catch (e: Exception) {
-                _uiState.update { it.copy(error = "Failed to toggle lock: ${e.message}") }
+                Log.e("LOCK_DEBUG", "Failed to toggle lock", e)
+                _uiState.update { it.copy(error = "Failed to change lock status") }
             }
         }
     }
