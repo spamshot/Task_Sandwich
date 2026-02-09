@@ -1,10 +1,12 @@
 package com.spam.tasksandwich
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.Firebase
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.auth
+import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.firestore
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -85,6 +87,16 @@ class JoinRoomViewModel : ViewModel() {
                 _uiState.update { it.copy(isLoading = false, joinSuccessRoomId = groupId) }
 
             } catch (e: Exception) {
+                Log.e("Joining room", "Failed: ${e.message}")
+                // Handle error
+                FirebaseCrashlytics.getInstance().log("Error in JoinRoomViewModel: Joining room")
+
+                // 2. Add custom context (e.g., which Room ID)
+                FirebaseCrashlytics.getInstance().setCustomKey("Joining room", joinCode)
+
+                // 3. Record the actual error (This sends the report to Firebase)
+                FirebaseCrashlytics.getInstance().recordException(e)
+
                 _uiState.update { it.copy(isLoading = false, error = "An error occurred: ${e.message}") }
             }
         }

@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.google.firebase.Firebase
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.auth
+import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.firestore
 import kotlinx.coroutines.async
@@ -19,6 +20,7 @@ import kotlinx.coroutines.tasks.await
 import java.util.UUID
 import java.util.Calendar
 
+// Data class for the auto-assign templates shown in the UI
 // Data class for the auto-assign templates shown in the UI
 data class AutoAssignTaskTemplate(
     val id: String,
@@ -58,10 +60,8 @@ class ManageTasksViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
             _uiState.update { it.copy(isLoading = false, error = "Room ID is missing.") }
             return
         }
-
         _uiState.update { it.copy(isLoading = true) }
 
-        // PATTERN: Flags to ensure the loading wheel only stops when all data is ready
         var roomLoaded = false
         var membersLoaded = false
         var tasksLoaded = false
@@ -73,136 +73,94 @@ class ManageTasksViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
             }
         }
 
-        // 1. LISTEN FOR ROOM NAME (For the Header)
+        // 1. Room Name Listener
         db.collection("groups").document(roomId)
             .addSnapshotListener { snapshot, _ ->
                 if (snapshot != null && snapshot.exists()) {
                     _uiState.update { it.copy(roomName = snapshot.getString("name") ?: "Room") }
                 }
-                roomLoaded = true
-                checkCompletion()
+                roomLoaded = true; checkCompletion()
             }
 
-        // 2. LISTEN FOR MEMBERS
+        // 2. Members Listener
         db.collection("groups").document(roomId).collection("groupMembers")
             .orderBy("joinedAt", Query.Direction.ASCENDING)
-            .addSnapshotListener { snapshot, _ ->
-                if (snapshot != null) {
-                    viewModelScope.launch {
-                        val memberJobs = snapshot.documents.map { memberDoc ->
-                            async {
-                                val userDoc = db.collection("users").document(memberDoc.id).get().await()
-                                RoomMember(
-                                    userId = memberDoc.id,
-                                    name = userDoc.getString("name") ?: "Unknown User",
-                                    totalPointsInGroup = 0
-                                )
-                            }
-                        }
-                        _uiState.update { it.copy(members = memberJobs.awaitAll()) }
-                        membersLoaded = true
-                        checkCompletion()
-                    }
-                } else {
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    FirebaseCrashlytics.getInstance().recordException(error)
                     membersLoaded = true; checkCompletion()
+                    return@addSnapshotListener
+                }
+                snapshot?.let { querySnapshot ->
+                    viewModelScope.launch {
+                        try {
+                            val memberJobs = querySnapshot.documents.map { memberDoc ->
+                                async {
+                                    val userDoc = db.collection("users").document(memberDoc.id).get().await()
+                                    RoomMember(
+                                        userId = memberDoc.id,
+                                        name = userDoc.getString("name") ?: "Unknown User",
+                                        totalPointsInGroup = 0
+                                    )
+                                }
+                            }
+                            _uiState.update { it.copy(members = memberJobs.awaitAll()) }
+                        } catch (e: Exception) {
+                            FirebaseCrashlytics.getInstance().recordException(e)
+                        } finally {
+                            membersLoaded = true
+                            checkCompletion()
+                        }
+                    }
                 }
             }
 
-        // 3. LISTEN FOR ASSIGNED TASKS (With Grouping Logic)
+        // 3. Assigned Tasks Listener (With Grouping)
         db.collection("tasks")
             .whereEqualTo("groupId", roomId)
             .whereEqualTo("status", "assigned")
             .orderBy("createdAt", Query.Direction.DESCENDING)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    Log.e("ManageTasksVM", "Task listener error: ${error.message}")
+                    FirebaseCrashlytics.getInstance().recordException(error)
                     tasksLoaded = true; checkCompletion()
                     return@addSnapshotListener
                 }
-
                 if (snapshot != null) {
-                    // 1. Map documents to objects AND force the ID and Name mapping
                     allTasksCache = snapshot.documents.mapNotNull { doc ->
                         val task = doc.toObject(Task::class.java)
-                        task?.copy(
-                            id = doc.id,
-                            // FORCE pull the name string directly from the doc.
-                            // This is the fastest way to get the data into the UI.
-                            assignedToName = doc.getString("assignedToName") ?: ""
-                        )
+                        task?.copy(id = doc.id, assignedToName = doc.getString("assignedToName") ?: "")
                     }
 
-                    // 2. GROUPING LOGIC
-                    // Group tasks by their sharedTaskId (or their own ID if it's a unique assignment)
                     val grouped = allTasksCache.groupBy { it.sharedTaskId ?: it.id }
-
-                    // 3. TRANSFORM to UI Representative
-                    val displayTasks = grouped.map { (_, tasksInGroup) ->
-                        val representative = tasksInGroup.first()
-
-                        // Collect all unique, non-blank names assigned to this task group
-                        val names = tasksInGroup.mapNotNull { it.assignedToName }
-                            .filter { it.isNotBlank() }
-                            .distinct()
-
+                    val displayTasks = grouped.map { (_, group) ->
+                        val representative = group.first()
+                        val names = group.mapNotNull { it.assignedToName }.filter { it.isNotBlank() }.distinct()
                         representative.copy(assigneeNames = names)
                     }
 
-                    // 4. Update UI state
                     _uiState.update { currentState ->
                         currentState.copy(
-                            isLoading = false,
                             repeatingTasks = displayTasks.filter { it.repeatOption != "Never" },
                             oneTimeTasks = displayTasks.filter { it.repeatOption == "Never" }
                         )
                     }
                 }
-                tasksLoaded = true
-                checkCompletion()
+                tasksLoaded = true; checkCompletion()
             }
 
-        // 4. LISTEN FOR AUTO-ASSIGN TEMPLATES
+        // 4. Templates Listener
         db.collection("groups").document(roomId).collection("autoAssignTemplates")
             .orderBy("createdAt", Query.Direction.DESCENDING)
             .addSnapshotListener { snapshot, _ ->
                 if (snapshot != null) {
                     val templates = snapshot.documents.mapNotNull { doc ->
-                        AutoAssignTaskTemplate(
-                            id = doc.id,
-                            title = doc.getString("title") ?: "",
-                            points = doc.getLong("points")?.toInt() ?: 0
-                        )
+                        AutoAssignTaskTemplate(doc.id, doc.getString("title") ?: "", doc.getLong("points")?.toInt() ?: 0)
                     }
                     _uiState.update { it.copy(autoAssignTemplates = templates) }
                 }
-                templatesLoaded = true
-                checkCompletion()
+                templatesLoaded = true; checkCompletion()
             }
-    }
-
-    // --- OPTIMISTIC UPDATES (Mirroring your working logic) ---
-
-    fun deleteTaskGroup(tasks: List<Task>) {
-        val idsToDelete = tasks.map { it.id }.toSet()
-
-        // 1. Optimistic Update: Remove from UI immediately
-        _uiState.update { currentState ->
-            currentState.copy(
-                repeatingTasks = currentState.repeatingTasks.filter { it.id !in idsToDelete },
-                oneTimeTasks = currentState.oneTimeTasks.filter { it.id !in idsToDelete }
-            )
-        }
-
-        // 2. Background Deletion
-        viewModelScope.launch {
-            try {
-                val batch = db.batch()
-                tasks.forEach { batch.delete(db.collection("tasks").document(it.id)) }
-                batch.commit().await()
-            } catch (e: Exception) {
-                _uiState.update { it.copy(error = "Delete failed: ${e.message}") }
-            }
-        }
     }
 
     fun saveTask(
@@ -210,141 +168,96 @@ class ManageTasksViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
         assignedTo: RoomMember?, expiresInDays: Int, isAutoAssign: Boolean
     ) {
         val currentUser = auth.currentUser
-        // Safety checks
-        if (currentUser == null || assignedTo == null || title.isBlank()) return
         val points = pointsStr.toIntOrNull()
-        if (points == null || points < 0) return
+        if (currentUser == null || assignedTo == null || title.isBlank() || points == null) return
 
         val adminName = uiState.value.members.find { it.userId == currentUser.uid }?.name ?: "Admin"
-
-        // 1. Determine who we are assigning to
         val membersToAssign = if (assignedTo.userId == "all") {
             uiState.value.members.filter { it.userId != "all" }
-        } else {
-            listOf(assignedTo)
-        }
+        } else listOf(assignedTo)
 
-        // 2. Prepare common data
-        val sharedTaskId = UUID.randomUUID().toString()
+        // --- UPDATED DUE DATE LOGIC: SNAP TO 23:59:59 ---
         val dueDate = if (expiresInDays > 0) {
             val calendar = Calendar.getInstance()
             calendar.add(Calendar.DAY_OF_YEAR, expiresInDays)
+            calendar.set(Calendar.HOUR_OF_DAY, 23)
+            calendar.set(Calendar.MINUTE, 59)
+            calendar.set(Calendar.SECOND, 59)
+            calendar.set(Calendar.MILLISECOND, 999)
             Timestamp(calendar.time)
-        } else { null }
+        } else null
 
+        val sharedTaskId = UUID.randomUUID().toString()
         val timestampNow = Timestamp.now()
-        val newTasksForBatch = mutableListOf<Pair<com.google.firebase.firestore.DocumentReference, Task>>()
+        val batch = db.batch()
 
-        // 3. Generate IDs and Data Objects *Before* Network Call
         membersToAssign.forEach { member ->
-            val newDocRef = db.collection("tasks").document() // Generate ID here
-
-            // Create the Task object for Local UI + Network
-            val taskObj = Task(
-                id = newDocRef.id, // Use the real ID
-                title = title,
-                points = points,
-                repeatOption = repeatOption,
-                groupId = roomId,
-                assignedToName = member.name,
-                assignedToUserId = member.userId,
-                assignedByUserId = currentUser.uid,
-                assignedByName = adminName,
-                status = "assigned",
-                isPersonal = false,
-                sharedTaskId = sharedTaskId,
-                createdAt = timestampNow,
-                dueDate = dueDate
+            val newDocRef = db.collection("tasks").document()
+            val taskData = hashMapOf(
+                "title" to title, "points" to points, "repeatOption" to repeatOption,
+                "groupId" to roomId, "assignedToUserId" to member.userId, "assignedToName" to member.name,
+                "assignedByUserId" to currentUser.uid, "assignedByName" to adminName,
+                "status" to "assigned", "isPersonal" to false, "sharedTaskId" to sharedTaskId,
+                "createdAt" to timestampNow, "dueDate" to dueDate
             )
-
-            newTasksForBatch.add(newDocRef to taskObj)
+            batch.set(newDocRef, taskData)
         }
 
-        // 4. OPTIMISTIC UPDATE: Update UI *Immediately* (Don't wait for internet)
-        // This ensures the task appears in the list instantly after clicking save.
-        if (!isAutoAssign && newTasksForBatch.isNotEmpty()) {
-            val createdTasks = newTasksForBatch.map { it.second }
-            _uiState.update { currentState ->
-                if (repeatOption == "Never") {
-                    currentState.copy(oneTimeTasks = createdTasks + currentState.oneTimeTasks)
-                } else {
-                    currentState.copy(repeatingTasks = createdTasks + currentState.repeatingTasks)
+        _uiState.update { it.copy(isSaving = true) }
+
+        viewModelScope.launch {
+            try {
+                if (isAutoAssign) {
+                    val templateRef = db.collection("groups").document(roomId).collection("autoAssignTemplates").document()
+                    batch.set(templateRef, hashMapOf(
+                        "title" to title, "points" to points, "repeatOption" to repeatOption,
+                        "expiresInDays" to expiresInDays, "createdAt" to timestampNow
+                    ))
                 }
+                batch.commit().await()
+                _uiState.update { it.copy(isSaving = false, saveSuccess = true) }
+            } catch (e: Exception) {
+                FirebaseCrashlytics.getInstance().log("SaveTask Failed in Room: $roomId")
+                FirebaseCrashlytics.getInstance().recordException(e)
+                _uiState.update { it.copy(isSaving = false, error = "Failed to save: ${e.message}") }
             }
         }
+    }
 
-        // 5. Perform the actual Network Request
-        _uiState.update { it.copy(isSaving = true, error = null) }
+    fun deleteTaskGroup(representativeTask: Task) {
+        val targetSharedId = representativeTask.sharedTaskId ?: representativeTask.id
+        val tasksToDelete = allTasksCache.filter { (it.sharedTaskId ?: it.id) == targetSharedId }
+        val idsToDelete = tasksToDelete.map { it.id }.toSet()
+
+        _uiState.update { currentState ->
+            currentState.copy(
+                repeatingTasks = currentState.repeatingTasks.filter { it.id !in idsToDelete },
+                oneTimeTasks = currentState.oneTimeTasks.filter { it.id !in idsToDelete }
+            )
+        }
+
         viewModelScope.launch {
             try {
                 val batch = db.batch()
-
-                // Add tasks to batch
-                newTasksForBatch.forEach { (docRef, task) ->
-                    // Convert Task object back to HashMap for Firestore to ensure clean saving
-                    // Or you can just batch.set(docRef, task) if Task is @Keep annotated and standard POJO
-                    val taskData = hashMapOf(
-                        "title" to task.title,
-                        "points" to task.points,
-                        "repeatOption" to task.repeatOption,
-                        "groupId" to task.groupId,
-                        "assignedToUserId" to task.assignedToUserId,
-                        "assignedByUserId" to task.assignedByUserId,
-                        "assignedByName" to task.assignedByName,
-                        "status" to task.status,
-                        "isPersonal" to task.isPersonal,
-                        "sharedTaskId" to task.sharedTaskId,
-                        "createdAt" to task.createdAt,
-                        "dueDate" to task.dueDate,
-                        "assignedToName" to task.assignedToName // SAVE NAME HERE
-                    )
-                    batch.set(docRef, taskData)
-                }
-
-                // Add Template to batch if needed
-                if (isAutoAssign) {
-                    val templateRef = db.collection("groups").document(roomId).collection("autoAssignTemplates").document()
-                    val templateData = hashMapOf(
-                        "title" to title, "points" to points, "repeatOption" to repeatOption,
-                        "expiresInDays" to expiresInDays, "createdAt" to timestampNow, "createdBy" to currentUser.uid
-                    )
-                    batch.set(templateRef, templateData)
-                }
-
+                tasksToDelete.forEach { batch.delete(db.collection("tasks").document(it.id)) }
                 batch.commit().await()
-                _uiState.update { it.copy(isSaving = false, saveSuccess = true) }
-
             } catch (e: Exception) {
-                // If it fails, revert the change (optional) or just show error
-                _uiState.update { it.copy(isSaving = false, error = e.message) }
-                // Note: In a production app, you might remove the optimistic tasks here if save failed.
+                FirebaseCrashlytics.getInstance().recordException(e)
+                _uiState.update { it.copy(error = "Delete failed: ${e.message}") }
             }
         }
     }
-
-
 
     fun deleteAutoAssignTemplate(templateId: String) {
-        // Optimistic UI Update
-        _uiState.update { currentState ->
-            currentState.copy(
-                autoAssignTemplates = currentState.autoAssignTemplates.filter { it.id != templateId }
-            )
-        }
-
-        // Network Request
+        _uiState.update { it.copy(autoAssignTemplates = it.autoAssignTemplates.filter { it.id != templateId }) }
         viewModelScope.launch {
             try {
-                db.collection("groups").document(roomId)
-                    .collection("autoAssignTemplates").document(templateId)
-                    .delete().await()
+                db.collection("groups").document(roomId).collection("autoAssignTemplates").document(templateId).delete().await()
             } catch (e: Exception) {
-                _uiState.update { it.copy(error = "Failed to delete template") }
+                FirebaseCrashlytics.getInstance().recordException(e)
             }
         }
     }
 
-    fun onSaveHandled() {
-        _uiState.update { it.copy(saveSuccess = false) }
-    }
+    fun onSaveHandled() { _uiState.update { it.copy(saveSuccess = false) } }
 }

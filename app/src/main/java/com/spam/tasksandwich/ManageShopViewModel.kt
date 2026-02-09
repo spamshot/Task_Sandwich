@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import androidx.compose.ui.platform.LocalContext
+import com.google.firebase.crashlytics.FirebaseCrashlytics
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 
@@ -164,7 +165,16 @@ class ManageShopViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
                 db.collection("users").document(purchase.purchasedByUserId)
                     .collection("purchaseHistory").document(purchase.id)
                     .update("status", "completed").await()
-            } catch (e: Exception) { Log.e("SHOP_VM", "Complete failed") }
+            } catch (e: Exception) { Log.e("SHOP_VM", "Complete failed")
+
+                FirebaseCrashlytics.getInstance().log("Error in ManageShopViewModel: complete purchase")
+
+                // 2. Add custom context (e.g., which Room ID)
+                FirebaseCrashlytics.getInstance().setCustomKey("Complete Purchase", purchase.id)
+
+                // 3. Record the actual error (This sends the report to Firebase)
+                FirebaseCrashlytics.getInstance().recordException(e)
+            }
         }
     }
 
@@ -187,6 +197,15 @@ class ManageShopViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
                 batch.commit().await()
                 Log.d("SHOP_VM", "Refund initiated in Room Log")
             } catch (e: Exception) {
+
+                FirebaseCrashlytics.getInstance().log("Error in ManageSelfTasksViewModel: Refund item ")
+
+                // 2. Add custom context (e.g., which Room ID)
+                FirebaseCrashlytics.getInstance().setCustomKey("Refund purchase", purchase.id)
+
+                // 3. Record the actual error (This sends the report to Firebase)
+                FirebaseCrashlytics.getInstance().recordException(e)
+
                 Log.e("SHOP_VM", "Refund failed: ${e.message}")
             }
         }
@@ -204,7 +223,15 @@ class ManageShopViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
                     "createdAt" to FieldValue.serverTimestamp()
                 )
                 db.collection("groups").document(roomId).collection("shopItems").add(newItem).await()
-            } catch (e: Exception) { Log.e("SHOP_VM", "Add failed") }
+            } catch (e: Exception) { Log.e("SHOP_VM", "Add failed")
+                FirebaseCrashlytics.getInstance().log("Error in ManageSelfTasksViewModel: Add shop item ")
+
+                // 2. Add custom context (e.g., which Room ID)
+                FirebaseCrashlytics.getInstance().setCustomKey("Add shop item", roomId)
+
+                // 3. Record the actual error (This sends the report to Firebase)
+                FirebaseCrashlytics.getInstance().recordException(e)
+            }
         }
     }
 
@@ -219,7 +246,16 @@ class ManageShopViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
             try {
                 db.collection("groups").document(roomId).collection("shopItems").document(itemId)
                     .update("name", name, "cost", cost, "mysteryText", mysteryText, "autoRedeem", autoRedeem).await()
-            } catch (e: Exception) { Log.e("SHOP_VM", "Update failed") }
+            } catch (e: Exception) { Log.e("SHOP_VM", "Update failed")
+
+                FirebaseCrashlytics.getInstance().log("Error in ManageSelfTasksViewModel: Update shop item")
+
+                // 2. Add custom context (e.g., which Room ID)
+                FirebaseCrashlytics.getInstance().setCustomKey("Update shop item", roomId)
+
+                // 3. Record the actual error (This sends the report to Firebase)
+                FirebaseCrashlytics.getInstance().recordException(e)
+            }
         }
     }
 
@@ -231,7 +267,15 @@ class ManageShopViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
         viewModelScope.launch {
             try {
                 db.collection("groups").document(roomId).collection("shopItems").document(itemId).delete().await()
-            } catch (e: Exception) { Log.e("SHOP_VM", "Delete failed") }
+            } catch (e: Exception) { Log.e("SHOP_VM", "Delete failed")
+                FirebaseCrashlytics.getInstance().log("Error in ManageSelfTasksViewModel: Delete shop item ")
+
+                // 2. Add custom context (e.g., which Room ID)
+                FirebaseCrashlytics.getInstance().setCustomKey("Delete shop item", roomId)
+
+                // 3. Record the actual error (This sends the report to Firebase)
+                FirebaseCrashlytics.getInstance().recordException(e)
+            }
         }
     }
 
@@ -243,7 +287,15 @@ class ManageShopViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
                 val batch = db.batch()
                 snapshot.documents.forEach { batch.delete(it.reference) }
                 batch.commit().await()
-            } catch (e: Exception) { Log.e("SHOP_VM", "Clear failed") }
+            } catch (e: Exception) { Log.e("SHOP_VM", "Clear failed")
+                FirebaseCrashlytics.getInstance().log("Error in ManageSelfTasksViewModel: Clear room history ")
+
+                // 2. Add custom context (e.g., which Room ID)
+                FirebaseCrashlytics.getInstance().setCustomKey("Clear room history", roomId)
+
+                // 3. Record the actual error (This sends the report to Firebase)
+                FirebaseCrashlytics.getInstance().recordException(e)
+            }
         }
     }
 }

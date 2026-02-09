@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.google.firebase.Firebase
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.auth
+import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.firestore
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -143,6 +144,15 @@ class ManageSelfTasksViewModel : ViewModel() {
                     )
                 }
             } catch (e: Exception) {
+
+                FirebaseCrashlytics.getInstance().log("Error in ManageSelfTasksViewModel: Save Self Task")
+
+                // 2. Add custom context (e.g., which Room ID)
+                FirebaseCrashlytics.getInstance().setCustomKey("Save Self Task", "Save Self Task")
+
+                // 3. Record the actual error (This sends the report to Firebase)
+                FirebaseCrashlytics.getInstance().recordException(e)
+
                 _uiState.update { it.copy(isLoading = false, error = e.message) }
             }
         }
@@ -163,6 +173,15 @@ class ManageSelfTasksViewModel : ViewModel() {
             try {
                 db.collection("tasks").document(taskId).delete().await()
             } catch (e: Exception) {
+
+                FirebaseCrashlytics.getInstance().log("Error in ManageSelfTasksViewModel: Delete Self Task")
+
+                // 2. Add custom context (e.g., which Room ID)
+                FirebaseCrashlytics.getInstance().setCustomKey("Delete Self Task", "Delete Self Task")
+
+                // 3. Record the actual error (This sends the report to Firebase)
+                FirebaseCrashlytics.getInstance().recordException(e)
+
                 _uiState.update { it.copy(error = "Failed to delete task: ${e.message}") }
             }
         }

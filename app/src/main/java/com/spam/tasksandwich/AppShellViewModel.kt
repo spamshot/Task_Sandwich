@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.google.firebase.Firebase
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.auth
+import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.firestore
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -174,6 +175,15 @@ class AppShellViewModel : ViewModel() {
                 _uiState.update { it.copy(newlyJoinedRoomId = groupId, error = null) }
 
             } catch (e: Exception) {
+                // Handle error
+                FirebaseCrashlytics.getInstance().log("Error in AppShellViewModel: joinRoom")
+
+                // 2. Add custom context (e.g., which Room ID)
+                FirebaseCrashlytics.getInstance().setCustomKey("Joining room", joinCode)
+
+                // 3. Record the actual error (This sends the report to Firebase)
+                FirebaseCrashlytics.getInstance().recordException(e)
+
                 _uiState.update { it.copy(error = "An error occurred: ${e.message}") }
             }
         }
@@ -234,6 +244,16 @@ class AppShellViewModel : ViewModel() {
 
             } catch (e: Exception) {
                 // Handle error
+                // Handle error
+                FirebaseCrashlytics.getInstance().log("Error in AppShellViewModel: create room")
+
+                // 2. Add custom context (e.g., which Room ID)
+                FirebaseCrashlytics.getInstance().setCustomKey("Create room", roomName)
+
+                // 3. Record the actual error (This sends the report to Firebase)
+                FirebaseCrashlytics.getInstance().recordException(e)
+
+                _uiState.update { it.copy(error = "An error occurred: ${e.message}") }
             }
         }
     }

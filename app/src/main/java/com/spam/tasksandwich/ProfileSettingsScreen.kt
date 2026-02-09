@@ -266,6 +266,7 @@ fun DeleteConfirmationDialog(
 
 /**
  * Tab 1: Transaction Log (Flattened History)
+ * Shop tab / Transactions tab
  */
 @Composable
 fun TransactionLogList(

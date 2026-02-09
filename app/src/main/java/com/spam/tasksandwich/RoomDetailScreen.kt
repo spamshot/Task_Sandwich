@@ -342,7 +342,7 @@ fun MemberListItem(
                 text = displayName,
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.weight(1f),
-                color = if (isGloballyCensored || isLocallyCensored) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f) else Color.Unspecified
+                color = if (isGloballyCensored || isLocallyCensored) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f) else Color.Unspecified
             )
 
             Text(

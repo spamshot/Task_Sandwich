@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.Firebase
 import com.google.firebase.auth.auth
+import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.google.firebase.firestore.firestore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -62,6 +63,15 @@ class ProfileSetupViewModel : ViewModel() {
 
                 _uiState.update { it.copy(isLoading = false, isProfileSaved = true) }
             } catch (e: Exception) {
+                // If it was already deleted (the ghost scenario), this catch
+                FirebaseCrashlytics.getInstance().log("Error in ProfileSetupViewModel: Save Profile")
+
+                // 2. Add custom context (e.g., which Room ID)
+                FirebaseCrashlytics.getInstance().setCustomKey("Save Profile", "Set up profile failed to save")
+
+                // 3. Record the actual error (This sends the report to Firebase)
+                FirebaseCrashlytics.getInstance().recordException(e)
+
                 _uiState.update { it.copy(isLoading = false, error = e.message) }
             }
         }

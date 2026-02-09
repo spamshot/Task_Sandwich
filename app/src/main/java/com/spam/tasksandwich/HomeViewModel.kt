@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.google.firebase.Firebase
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.auth
+import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.firestore
 import com.google.firebase.functions.functions
@@ -52,6 +53,12 @@ class HomeViewModel : ViewModel(), RefreshesViewModel {
 
     init {
         loadAllData()
+        val uid = auth.currentUser?.uid
+        if (uid != null) {
+            val update = hashMapOf("lastActive" to com.google.firebase.Timestamp.now())
+            db.collection("users").document(uid)
+                .set(update, com.google.firebase.firestore.SetOptions.merge())
+        }
     }
 
     private fun loadAllData() {
@@ -319,6 +326,16 @@ class HomeViewModel : ViewModel(), RefreshesViewModel {
                 }
                 batch.commit().await()
             } catch (e: Exception) {
+                Log.e("Marking Complete", "Failed: ${e.message}")
+                // Handle error
+                FirebaseCrashlytics.getInstance().log("Error in homeViewModel: Task mark as complete")
+
+                // 2. Add custom context (e.g., which Room ID)
+                FirebaseCrashlytics.getInstance().setCustomKey("task mark", task.id)
+
+                // 3. Record the actual error (This sends the report to Firebase)
+                FirebaseCrashlytics.getInstance().recordException(e)
+
                 _uiState.update { it.copy(error = "Could not complete task: ${e.message}") }
             }
         }
@@ -368,6 +385,15 @@ class HomeViewModel : ViewModel(), RefreshesViewModel {
                 }
             } catch (e: Exception) {
                 Log.e("LeaveOrDelete", "Failed: ${e.message}")
+                // Handle error
+                FirebaseCrashlytics.getInstance().log("Error in homeViewModel: Leave or Delete")
+
+                // 2. Add custom context (e.g., which Room ID)
+                FirebaseCrashlytics.getInstance().setCustomKey("Leave or Delete room", room.groupId)
+
+                // 3. Record the actual error (This sends the report to Firebase)
+                FirebaseCrashlytics.getInstance().recordException(e)
+
                 if (e is com.google.firebase.functions.FirebaseFunctionsException) {
                     _uiState.update { it.copy(error = "Server Error: ${e.message}") }
                 } else {

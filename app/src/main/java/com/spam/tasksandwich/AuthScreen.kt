@@ -1,12 +1,18 @@
 package com.spam.tasksandwich
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
@@ -50,11 +56,19 @@ fun AuthScreen(
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            if (authMode == AuthMode.LOGIN){
+                Image(painter = painterResource(id = R.drawable.icontasksandwich), contentDescription = "Locked", modifier = Modifier.size(142.dp).clip(CircleShape))
+            }else{
+                Text(
+                    text = "Create an Account",
+                    style = MaterialTheme.typography.headlineLarge
+                )
+            }
 
-            Text(
-                text = if (authMode == AuthMode.LOGIN) "Welcome Back" else "Create an Account",
-                style = MaterialTheme.typography.headlineLarge
-            )
+//            Text(
+//                text = if (authMode == AuthMode.LOGIN) "Welcome Back" else "Create an Account",
+//                style = MaterialTheme.typography.headlineLarge
+//            )
             Spacer(modifier = Modifier.height(32.dp))
 
             OutlinedTextField(

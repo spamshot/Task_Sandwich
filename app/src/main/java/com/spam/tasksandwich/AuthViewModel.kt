@@ -1,11 +1,13 @@
 package com.spam.tasksandwich
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.Firebase
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthUserCollisionException
 import com.google.firebase.auth.auth
+import com.google.firebase.crashlytics.FirebaseCrashlytics
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -57,6 +59,15 @@ class AuthViewModel : ViewModel() {
                 auth.signInWithEmailAndPassword(email, password).await()
                 _uiState.update { it.copy(isLoading = false, authSuccess = true) }
             } catch (e: Exception) {
+                Log.e("Login", "Failed: ${e.message}")
+                // Handle error
+                FirebaseCrashlytics.getInstance().log("Error in AuthViewModel: User login")
+
+                // 2. Add custom context (e.g., which Room ID)
+                FirebaseCrashlytics.getInstance().setCustomKey("User login", email)
+
+                // 3. Record the actual error (This sends the report to Firebase)
+                FirebaseCrashlytics.getInstance().recordException(e)
                 _uiState.update { it.copy(isLoading = false, error = e.message) }
             }
         }

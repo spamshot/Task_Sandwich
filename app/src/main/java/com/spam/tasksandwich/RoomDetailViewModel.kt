@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.google.firebase.Firebase
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.auth
+import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.google.firebase.firestore.FieldValue
 import kotlinx.coroutines.flow.update
 import com.google.firebase.firestore.firestore
@@ -99,6 +100,15 @@ class RoomDetailViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
                 // This is complex, so for now we accept the home screen might show an old name
                 // until the app is restarted or the user rejoins.
             } catch (e: Exception) {
+
+                FirebaseCrashlytics.getInstance().log("Error in RoomDetailViewModel: update room name")
+
+                // 2. Add custom context (e.g., which Room ID)
+                FirebaseCrashlytics.getInstance().setCustomKey("Update room", "Failed to update room name")
+
+                // 3. Record the actual error (This sends the report to Firebase)
+                FirebaseCrashlytics.getInstance().recordException(e)
+
                 _uiState.update { it.copy(error = "Failed to update name: ${e.message}") }
             }
         }
@@ -230,6 +240,14 @@ class RoomDetailViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
                 // listenToRoomAndUser() will catch the change and update it for us.
                 Log.d("LOCK_DEBUG", "Successfully toggled lock to: ${!currentlyLocked}")
             } catch (e: Exception) {
+                FirebaseCrashlytics.getInstance().log("Error in RoomDetailViewModel: Lock Room failed")
+
+                // 2. Add custom context (e.g., which Room ID)
+                FirebaseCrashlytics.getInstance().setCustomKey("Lock Room", "Room lock failed to lock")
+
+                // 3. Record the actual error (This sends the report to Firebase)
+                FirebaseCrashlytics.getInstance().recordException(e)
+
                 Log.e("LOCK_DEBUG", "Failed to toggle lock", e)
                 _uiState.update { it.copy(error = "Failed to change lock status") }
             }
@@ -286,6 +304,14 @@ class RoomDetailViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
                                     .update("isLocked", false)
                                     .await()
                             } catch (e: Exception) {
+
+                                FirebaseCrashlytics.getInstance().log("Error in RoomDetailViewModel: Unlock room auto failed")
+
+                                // 2. Add custom context (e.g., which Room ID)
+                                FirebaseCrashlytics.getInstance().setCustomKey("Unlock room", "Auto-unlock failed")
+
+                                // 3. Record the actual error (This sends the report to Firebase)
+                                FirebaseCrashlytics.getInstance().recordException(e)
                                 Log.e("RoomLock", "Failed to auto-unlock: ${e.message}")
                             }
                         }
@@ -411,6 +437,13 @@ class RoomDetailViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
                 // The real-time listeners will automatically update the UI
 
             } catch (e: Exception) {
+                FirebaseCrashlytics.getInstance().log("Error in RoomDetailViewModel: Kick Member")
+
+                // 2. Add custom context (e.g., which Room ID)
+                FirebaseCrashlytics.getInstance().setCustomKey("Kick Member", "Failed to kick member: $userIdToKick")
+
+                // 3. Record the actual error (This sends the report to Firebase)
+                FirebaseCrashlytics.getInstance().recordException(e)
                 Log.e("KickMember", "Failed: ${e.message}")
 
                 // Detailed Error Logging (Just like in HomeViewModel)

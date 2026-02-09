@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.google.firebase.Firebase
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.auth
+import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.firestore
@@ -156,6 +157,15 @@ class ViewShopViewModel(savedStateHandle: SavedStateHandle) : ViewModel() {
                 batch.commit().await()
                 _uiState.update { it.copy(cartItems = emptyList(), cartTotal = 0, checkoutSuccess = true) }
             } catch (e: Exception) {
+
+                FirebaseCrashlytics.getInstance().log("Error in ViewShopViewModel: Shop checkout")
+
+                // 2. Add custom context (e.g., which Room ID)
+                FirebaseCrashlytics.getInstance().setCustomKey("Shop Checkout", "Failed to checkout item $roomId")
+
+                // 3. Record the actual error (This sends the report to Firebase)
+                FirebaseCrashlytics.getInstance().recordException(e)
+
                 _uiState.update { it.copy(error = "Checkout failed: ${e.message}") }
             }
         }

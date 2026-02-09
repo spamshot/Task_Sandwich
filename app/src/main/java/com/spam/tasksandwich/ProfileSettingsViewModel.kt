@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.google.firebase.Firebase
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.auth
+import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.firestore
 import kotlinx.coroutines.async
@@ -189,6 +190,15 @@ class ProfileSettingsViewModel : ViewModel() {
                 // The SnapshotListener will automatically update the UI list
                 Log.d("DELETE", "Successfully cleared all historical logs")
             } catch (e: Exception) {
+
+                FirebaseCrashlytics.getInstance().log("Error in ProfileSettingsViewModel: Clear all history")
+
+                // 2. Add custom context (e.g., which Room ID)
+                FirebaseCrashlytics.getInstance().setCustomKey("Clear all history", uid)
+
+                // 3. Record the actual error (This sends the report to Firebase)
+                FirebaseCrashlytics.getInstance().recordException(e)
+
                 Log.e("DELETE", "Failed to clear history: ${e.message}")
             }
         }
@@ -218,6 +228,13 @@ class ProfileSettingsViewModel : ViewModel() {
                 Log.d("DELETE_DEBUG", "Task $taskId wiped from server and cache")
             } catch (e: Exception) {
                 // If it was already deleted (the ghost scenario), this catch
+                FirebaseCrashlytics.getInstance().log("Error in ProfileSettingsViewModel: Delete Task ")
+
+                // 2. Add custom context (e.g., which Room ID)
+                FirebaseCrashlytics.getInstance().setCustomKey("Delete Task", taskId)
+
+                // 3. Record the actual error (This sends the report to Firebase)
+                FirebaseCrashlytics.getInstance().recordException(e)
                 // prevents the app from crashing or "putting the item back."
                 Log.e("DELETE_DEBUG", "Server ignored delete (likely already gone): ${e.message}")
             }
@@ -245,6 +262,16 @@ class ProfileSettingsViewModel : ViewModel() {
                     db.collection("groups").document(groupId).collection("purchaseLog").document(purchaseId).delete().await()
                 }
             } catch (e: Exception) {
+
+                // If it was already deleted (the ghost scenario), this catch
+                FirebaseCrashlytics.getInstance().log("Error in ProfileSettingsViewModel: Delete Transaction ")
+
+                // 2. Add custom context (e.g., which Room ID)
+                FirebaseCrashlytics.getInstance().setCustomKey("Delete Transaction", "$purchaseId $groupId")
+
+                // 3. Record the actual error (This sends the report to Firebase)
+                FirebaseCrashlytics.getInstance().recordException(e)
+
                 Log.e("DELETE", "Error: ${e.message}")
             }
         }
@@ -276,6 +303,15 @@ class ProfileSettingsViewModel : ViewModel() {
                 Log.d("DELETE_ACCOUNT", "User wiped and logged out")
 
             } catch (e: Exception) {
+
+                // If it was already deleted (the ghost scenario), this catch
+                FirebaseCrashlytics.getInstance().log("Error in ProfileSettingsViewModel: Delete Account")
+
+                // 2. Add custom context (e.g., which Room ID)
+                FirebaseCrashlytics.getInstance().setCustomKey("Delete Task", user.uid)
+
+                // 3. Record the actual error (This sends the report to Firebase)
+                FirebaseCrashlytics.getInstance().recordException(e)
                 Log.e("DELETE_ACCOUNT", "Error", e)
 
                 if (e.message?.contains("recent-login") == true) {

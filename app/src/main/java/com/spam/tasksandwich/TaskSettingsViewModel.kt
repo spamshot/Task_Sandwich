@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.Firebase
 import com.google.firebase.auth.auth
+import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.firestore
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -69,6 +70,15 @@ class TaskSettingsViewModel : ViewModel() {
                 // If this succeeds, the real-time listener will eventually get the
                 // same state we already set, so the UI won't change again.
             } catch (e: Exception) {
+
+                FirebaseCrashlytics.getInstance().log("Error in TaskSettingsViewModel: Delete Task")
+
+                // 2. Add custom context (e.g., which Room ID)
+                FirebaseCrashlytics.getInstance().setCustomKey("Delete Task", "Failed to delete task")
+
+                // 3. Record the actual error (This sends the report to Firebase)
+                FirebaseCrashlytics.getInstance().recordException(e)
+
                 _uiState.update { it.copy(error = "Failed to delete task: ${e.message}") }
                 // OPTIONAL: In a more complex app, you could add logic here
                 // to add the task back to the list if the deletion fails,

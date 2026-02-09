@@ -15,6 +15,8 @@ import androidx.navigation.navArgument
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.navigation.NavHostController
+import androidx.navigation.navArgument
+
 
 
 
@@ -31,6 +33,9 @@ sealed class Screen(val route: String) {
 
     object ManageTasks : Screen("manage_tasks_screen/{roomId}") {
         fun createRoute(roomId: String) = "manage_tasks_screen/$roomId"
+        val arguments = listOf(
+            navArgument("roomId") { type = NavType.StringType }
+        )
     }
     object CreateShopItem : Screen("create_shop_item_screen/{roomId}") {
         fun createRoute(roomId: String) = "create_shop_item_screen/$roomId"
@@ -133,9 +138,14 @@ fun AppNavHost(
 
         composable(
             route = Screen.ManageTasks.route,
-            arguments = listOf(navArgument("roomId") { type = NavType.StringType })
-        ) {
+            arguments = Screen.ManageTasks.arguments // This will now work!
+        ) { backStackEntry ->
+            // 1. Get the roomId from the navigation arguments
+            val roomId = backStackEntry.arguments?.getString("roomId") ?: ""
+
+            // 2. Pass it into the Screen
             ManageTasksScreen(
+                roomId = roomId,
                 onNavigateBack = { navController.popBackStack() }
             )
         }
