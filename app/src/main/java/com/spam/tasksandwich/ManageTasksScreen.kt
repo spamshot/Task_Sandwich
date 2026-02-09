@@ -73,7 +73,8 @@ fun ManageTasksScreen(
 
     Scaffold(
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
-    ) { paddingValues ->
+    ) {
+        paddingValues ->
         if (uiState.isLoading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator()
@@ -82,7 +83,7 @@ fun ManageTasksScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(paddingValues)
+//                    .padding(paddingValues)
                     .padding(16.dp)
                     .verticalScroll(rememberScrollState()),
                 horizontalAlignment = Alignment.CenterHorizontally
@@ -185,6 +186,7 @@ fun ManageTasksScreen(
                                         text = { Text(member.name) },
                                         onClick = {
                                             assignedTo = member
+                                            isAutoAssign = false
                                             expandedAssignee = false
                                         }
                                     )
@@ -202,12 +204,16 @@ fun ManageTasksScreen(
                                 steps = 29
                             )
                         }
+                        //Checks if the task is going to all users.
+                        val canAutoAssign = assignedTo?.userId == "all"
+
 
                         Spacer(modifier = Modifier.height(8.dp))
 
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Checkbox(checked = isAutoAssign, onCheckedChange = { isAutoAssign = it })
-                            Text("Make this an Auto-Assign template", style = MaterialTheme.typography.bodyMedium)
+                            Checkbox(checked = isAutoAssign, onCheckedChange = { isAutoAssign = it }, enabled = canAutoAssign)
+                            Text(if(canAutoAssign) "Auto-Assign to any that joins" else "Auto-Assign must be assigned to all",
+                                style = MaterialTheme.typography.bodyMedium)
                         }
 
                         Spacer(modifier = Modifier.height(16.dp))

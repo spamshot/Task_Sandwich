@@ -4,7 +4,9 @@ package com.spam.tasksandwich
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -87,93 +89,110 @@ fun AddSelfTaskForm(
     Scaffold(
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
     ) { paddingValues ->
-        Surface(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
+        val paddingValues = PaddingValues(top = 10.dp)
+        Surface(modifier = Modifier.fillMaxSize()
+            .padding(paddingValues)
+        ) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 14.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
+                    .padding(16.dp)
+                    .verticalScroll(rememberScrollState()),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text("Add a Personal Task", style = MaterialTheme.typography.headlineMedium)
-                Spacer(modifier = Modifier.height(10.dp))
-
-                // Task Name Field
-                OutlinedTextField(
-                    value = title,
-                    onValueChange = { title = it },
-                    label = { Text("Task Name") },
+                Card(
                     modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Repeat Option Dropdown
-                ExposedDropdownMenuBox(
-                    expanded = isDropdownExpanded,
-                    onExpandedChange = { isDropdownExpanded = it }
+                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
                 ) {
-                    OutlinedTextField(
-                        value = selectedRepeatOption,
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("Repeat") },
-                        trailingIcon = {
-                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = isDropdownExpanded)
-                        },
-                        colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+                    Column(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .menuAnchor()
-                    )
-                    ExposedDropdownMenu(
-                        expanded = isDropdownExpanded,
-                        onDismissRequest = { isDropdownExpanded = false }
+//                    .fillMaxSize()
+                            .padding(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
                     ) {
-                        repeatOptions.forEach { option ->
-                            DropdownMenuItem(
-                                text = { Text(option) },
-                                onClick = {
-                                    selectedRepeatOption = option
-                                    isDropdownExpanded = false
-                                }
+                        Text("Add a Personal Task", style = MaterialTheme.typography.headlineMedium)
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Task Name Field
+                        OutlinedTextField(
+                            value = title,
+                            onValueChange = { title = it },
+                            label = { Text("Task Name") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Repeat Option Dropdown
+                        ExposedDropdownMenuBox(
+                            expanded = isDropdownExpanded,
+                            onExpandedChange = { isDropdownExpanded = it }
+                        ) {
+                            OutlinedTextField(
+                                value = selectedRepeatOption,
+                                onValueChange = {},
+                                readOnly = true,
+                                label = { Text("Repeat") },
+                                trailingIcon = {
+                                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = isDropdownExpanded)
+                                },
+                                colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .menuAnchor()
                             )
+                            ExposedDropdownMenu(
+                                expanded = isDropdownExpanded,
+                                onDismissRequest = { isDropdownExpanded = false }
+                            ) {
+                                repeatOptions.forEach { option ->
+                                    DropdownMenuItem(
+                                        text = { Text(option) },
+                                        onClick = {
+                                            selectedRepeatOption = option
+                                            isDropdownExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(32.dp))
+
+                        // Error Message Display
+                        if (uiState.error != null) {
+                            Text(
+                                text = uiState.error,
+                                color = MaterialTheme.colorScheme.error,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.padding(bottom = 16.dp)
+                            )
+                        }
+
+                        // Save Button
+                        Button(
+                            onClick = {
+                                viewModel.saveTask(title, selectedRepeatOption)
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = !uiState.isLoading && title.isNotBlank()
+                        ) {
+                            Text("Save and Add Another")
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Go Back Button
+                        OutlinedButton(
+                            onClick = onGoBack, // It simply calls the callback
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = !uiState.isLoading
+                        ) {
+                            Text("Go Back")
                         }
                     }
                 }
-                Spacer(modifier = Modifier.height(32.dp))
-
-                // Error Message Display
-                if (uiState.error != null) {
-                    Text(
-                        text = uiState.error,
-                        color = MaterialTheme.colorScheme.error,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(bottom = 16.dp)
-                    )
-                }
-
-                // Save Button
-                Button(
-                    onClick = {
-                        viewModel.saveTask(title, selectedRepeatOption)
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !uiState.isLoading && title.isNotBlank()
-                ) {
-                    Text("Save and Add Another")
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Go Back Button
-                OutlinedButton(
-                    onClick = onGoBack, // It simply calls the callback
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !uiState.isLoading
-                ) {
-                    Text("Go Back")
-                }
             }
+
         }
     }
 }
