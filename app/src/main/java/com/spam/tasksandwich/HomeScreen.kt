@@ -100,7 +100,10 @@ fun HomeScreen(
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { paddingValues ->
-        Surface(modifier = Modifier.fillMaxSize()) {
+
+        val paddingValues = PaddingValues(top = 14.dp, bottom = 14.dp, start = 10.dp, end = 10.dp)
+
+        Surface(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
             when {
                 uiState.isLoading -> {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

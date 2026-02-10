@@ -58,6 +58,11 @@ fun ManageTasksScreen(
     var expandedRepeat by remember { mutableStateOf(false) }
     var expandedAssignee by remember { mutableStateOf(false) }
 
+    var taskToDelete by remember { mutableStateOf<Task?>(null) }
+    var templateToDelete by remember { mutableStateOf<AutoAssignTaskTemplate?>(null) }
+
+    val isRepeatEnabled = expiresInDays == 0
+
     val repeatOptions = listOf("Never", "Every Day", "Once a Week", "Once a Month")
 
     LaunchedEffect(uiState.saveSuccess) {
@@ -75,6 +80,8 @@ fun ManageTasksScreen(
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
     ) {
         paddingValues ->
+        val paddingValues = PaddingValues(all = 16.dp)
+
         if (uiState.isLoading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator()
@@ -83,8 +90,8 @@ fun ManageTasksScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-//                    .padding(paddingValues)
-                    .padding(16.dp)
+                    .padding(paddingValues)
+//                    .padding(16.dp)
                     .verticalScroll(rememberScrollState()),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
@@ -125,30 +132,44 @@ fun ManageTasksScreen(
                             )
 
                             ExposedDropdownMenuBox(
-                                expanded = expandedRepeat,
-                                onExpandedChange = { expandedRepeat = !expandedRepeat },
+                                // Only allow expanding if expiresInDays is 0
+                                expanded = expandedRepeat && isRepeatEnabled,
+                                onExpandedChange = {
+                                    if (isRepeatEnabled) expandedRepeat = !expandedRepeat
+                                },
                                 modifier = Modifier.weight(1.4f)
                             ) {
                                 OutlinedTextField(
                                     value = repeatOption,
                                     onValueChange = {},
                                     readOnly = true,
+                                    // --- NEW: Disable the field visually and functionally ---
+                                    enabled = isRepeatEnabled,
                                     label = { Text("Repeats") },
-                                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedRepeat) },
+                                    trailingIcon = {
+                                        // Only show the arrow if it's enabled
+                                        if (isRepeatEnabled) {
+                                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedRepeat)
+                                        }
+                                    },
                                     modifier = Modifier.menuAnchor()
                                 )
-                                ExposedDropdownMenu(
-                                    expanded = expandedRepeat,
-                                    onDismissRequest = { expandedRepeat = false }
-                                ) {
-                                    repeatOptions.forEach { option ->
-                                        DropdownMenuItem(
-                                            text = { Text(option) },
-                                            onClick = {
-                                                repeatOption = option
-                                                expandedRepeat = false
-                                            }
-                                        )
+
+                                // Only render the menu if enabled
+                                if (isRepeatEnabled) {
+                                    ExposedDropdownMenu(
+                                        expanded = expandedRepeat,
+                                        onDismissRequest = { expandedRepeat = false }
+                                    ) {
+                                        repeatOptions.forEach { option ->
+                                            DropdownMenuItem(
+                                                text = { Text(option) },
+                                                onClick = {
+                                                    repeatOption = option
+                                                    expandedRepeat = false
+                                                }
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -196,13 +217,28 @@ fun ManageTasksScreen(
 
                         if (repeatOption == "Never") {
                             Spacer(modifier = Modifier.height(8.dp))
-                            Text("Expires in: $expiresInDays days", style = MaterialTheme.typography.bodySmall)
+                            Text("Expires in: $expiresInDays days from now. at Midnight!", style = MaterialTheme.typography.bodySmall)
                             Slider(
                                 value = expiresInDays.toFloat(),
-                                onValueChange = { expiresInDays = it.toInt() },
+                                onValueChange = {
+                                    expiresInDays = it.toInt()
+                                    // Safeguard: If they set an expiration, ensure repeat is Never
+                                    if (expiresInDays > 0) {
+                                        repeatOption = "Never"
+                                    }
+                                },
                                 valueRange = 0f..30f,
                                 steps = 29
                             )
+                            if (expiresInDays == 0)Text("0 days is never", style = MaterialTheme.typography.bodySmall)
+
+
+                        }else{
+                            // saftey net, for adding assign to member then plugging in a repeats. its a bug catch
+                            expiresInDays = 0
+                        }
+                        if (expiresInDays != 0) {
+                            repeatOption = "Never"
                         }
                         //Checks if the task is going to all users.
                         val canAutoAssign = assignedTo?.userId == "all"
@@ -240,7 +276,7 @@ fun ManageTasksScreen(
                     uiState.repeatingTasks.forEach { task ->
                         AssignedTaskCard(
                             task = task,
-                            onDelete = { viewModel.deleteTaskGroup(task) }
+                            onDelete = { taskToDelete = task }
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                     }
@@ -255,7 +291,7 @@ fun ManageTasksScreen(
                     uiState.oneTimeTasks.forEach { task ->
                         AssignedTaskCard(
                             task = task,
-                            onDelete = { viewModel.deleteTaskGroup(task) }
+                            onDelete = { taskToDelete = task }
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                     }
@@ -270,12 +306,38 @@ fun ManageTasksScreen(
                     uiState.autoAssignTemplates.forEach { template ->
                         TemplateCard(
                             template = template,
-                            onDelete = { viewModel.deleteAutoAssignTemplate(template.id) }
+                            onDelete = { templateToDelete = template } // Trigger the state
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                     }
                 }
             }
+        }
+
+        taskToDelete?.let { task ->
+            DeleteConfirmationDialog(
+                itemName = task.title,
+                // Since deleting a grouped task removes it for everyone, we show a clear warning
+                warningMessage = "This will remove this task for EVERYONE listed: ${task.assigneeNames.joinToString(", ")}.",
+                onDismiss = { taskToDelete = null },
+                onConfirm = {
+                    viewModel.deleteTaskGroup(task) // Call the grouped delete logic
+                    taskToDelete = null
+                }
+            )
+        }
+        // --- TEMPLATE DELETE CONFIRMATION ---
+        templateToDelete?.let { template ->
+            DeleteConfirmationDialog(
+                itemName = template.title,
+                // Custom warning for templates
+                warningMessage = "This is a TEMPLATE. Deleting it will stop this task from being automatically assigned to NEW members who join the room in the future.",
+                onDismiss = { templateToDelete = null },
+                onConfirm = {
+                    viewModel.deleteAutoAssignTemplate(template.id)
+                    templateToDelete = null
+                }
+            )
         }
     }
 }
@@ -317,20 +379,32 @@ fun AssignedTaskCard(task: Task, onDelete: () -> Unit) {
     }
 }
 
+
+//For Auto-Assign
+
 @Composable
 fun TemplateCard(template: AutoAssignTaskTemplate, onDelete: () -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
         Row(
             modifier = Modifier.padding(16.dp).fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(template.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Text("${template.points} Points", style = MaterialTheme.typography.bodySmall)
+                Text("Auto-Assign Task for everyone joining", style = MaterialTheme.typography.labelSmall)
             }
-            IconButton(onClick = onDelete) {
-                Icon(Icons.Default.Delete, contentDescription = "Delete Template", tint = MaterialTheme.colorScheme.error)
+
+            // --- UPDATED: Now looks like the AssignedTaskCard button ---
+            OutlinedButton(
+                onClick = onDelete,
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
+            ) {
+                Text("Cancel Task")
             }
         }
     }

@@ -108,7 +108,7 @@ fun AppNavHost(
             )
         }
 
-        composable(Screen.ManageSelfTasks.route) {
+        composable(Screen.`ManageSelfTasks`.route) {
             ManageSelfTasksScreen(
                 onGoBack = { navController.popBackStack() }
             )
