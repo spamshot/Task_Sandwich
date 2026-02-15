@@ -1,4 +1,4 @@
-App made with AI and user editds and debugging for better understanding of AI use in complex applications.
+App made with AI, dev editds + debugging for better understanding of AI use in complex applications.
 
 Productivity app for assigning chores and other task.
 App will be live soon and removed from public view. 
