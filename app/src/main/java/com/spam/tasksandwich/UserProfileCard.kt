@@ -28,49 +28,60 @@ import com.spam.tasksandwich.IconRepository.AllIconsMap
 @Composable
 fun UserProfileCard(
     name: String,
-//    email: String,
     pointsInRoom: Int,
     totalPoints: Int,
     iconId: String,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier // this param was being ignored
 ) {
+    val resId = AllIconsMap[iconId] ?: R.drawable.carrotdog
 
-    val resId = AllIconsMap[iconId] ?: R.drawable.carrotdog // Fallback to a default
     Card(
-        modifier = Modifier
+        // FIX 1: Chain the caller's modifier instead of ignoring it.
+        // Before: modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp)
+        // The passed-in `modifier` was silently dropped, so callers couldn't
+        // customize positioning, padding, or size.
+        modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = 24.dp),
+            .padding(vertical = 24.dp), // ✅ caller's modifier respected first
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
         Row(
             modifier = Modifier.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Image(
-                painter = painterResource(id = resId),
-                contentDescription = "User Avatar",
-                modifier = Modifier
-                    .size(64.dp)
-                    .clip(CircleShape)
-            )
-            Spacer(Modifier.width(16.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(text = name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-//                Text(text = email, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            // FIX 2: Surface behind avatar handles transparent icon images.
+            Surface(
+                modifier = Modifier.size(64.dp),
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.surfaceVariant // ✅ fallback bg for transparent icons
+            ) {
+                Image(
+                    painter = painterResource(id = resId),
+                    contentDescription = "Avatar for $name", // ✅ more descriptive for accessibility
+                    modifier = Modifier
+                        .size(64.dp)
+                        .clip(CircleShape)
+                )
+            }
 
-                // Display the points for the current room
+            Spacer(Modifier.width(16.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = name,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
                 Text(
                     text = "$pointsInRoom pts (in this room)",
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
                 )
-
-                // Display the total lifetime points
                 Text(
                     text = "$totalPoints pts (total)",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.secondary // Use a different color to distinguish
+                    color = MaterialTheme.colorScheme.secondary
                 )
             }
         }

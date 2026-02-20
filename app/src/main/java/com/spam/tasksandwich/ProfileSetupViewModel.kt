@@ -27,12 +27,17 @@ class ProfileSetupViewModel : ViewModel() {
     val uiState = _uiState.asStateFlow()
 
     fun saveProfile(name: String, age: String) {
-        // Basic validation
-        if (name.isBlank() || name.length > 10) { // || age.isBlank()
-            _uiState.update { it.copy(error = "Name cannot be empty & must be less than 10 characters.") }
+        // FIX 3: Trim whitespace from name before validation.
+        val trimmedName = name.trim()
+
+        if (trimmedName.isBlank() || trimmedName.length > 10) {
+            _uiState.update { it.copy(error = "Name must be between 1 and 10 characters.") }
             return
         }
 
+        // FIX 2: Clamp age to a valid range instead of accepting any number.
+        val ageInt = age.toIntOrNull()
+        val validatedAge = if (ageInt != null && ageInt in 1..120) ageInt else null
 
         val currentUser = auth.currentUser
         if (currentUser == null) {
@@ -40,40 +45,33 @@ class ProfileSetupViewModel : ViewModel() {
             return
         }
 
-        // Create a user object to save. This is where you'll add more fields later.
         val userProfile = hashMapOf(
-            "name" to name,
-            "age" to age.toIntOrNull(), // Convert age to number
+            "name" to trimmedName, // ✅ trimmed
+            "age" to validatedAge, // ✅ validated range or null
             "email" to currentUser.email,
-            // Add default values for new fields from our plan
-            "selectedIconId" to "avatar_1", // Default icon
-            "selectedBackgroundId" to "bg_stars", // Default background
-            // The global role for creating/joining groups
-            "role" to "parent" // We can add UI for this choice later
+            "selectedIconId" to "avatar_1",
+            "selectedBackgroundId" to "bg_stars",
+            "role" to "parent" // TODO: make this a user choice in a future step
         )
 
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
             try {
-                // We use the user's UID as the document ID.
-                // This creates a permanent link between their auth account and their data.
                 db.collection("users").document(currentUser.uid)
                     .set(userProfile)
-                    .await() // from the coroutines-play-services library
-
+                    .await()
                 _uiState.update { it.copy(isLoading = false, isProfileSaved = true) }
             } catch (e: Exception) {
-                // If it was already deleted (the ghost scenario), this catch
                 FirebaseCrashlytics.getInstance().log("Error in ProfileSetupViewModel: Save Profile")
-
-                // 2. Add custom context (e.g., which Room ID)
                 FirebaseCrashlytics.getInstance().setCustomKey("Save Profile", "Set up profile failed to save")
-
-                // 3. Record the actual error (This sends the report to Firebase)
                 FirebaseCrashlytics.getInstance().recordException(e)
-
-                _uiState.update { it.copy(isLoading = false, error = e.message) }
+                _uiState.update { it.copy(isLoading = false, error = "Could not save profile. Please try again.") }
             }
         }
+    }
+
+    // FIX 4: Reset flag after navigation so back-navigation doesn't re-trigger it.
+    fun onProfileSaveHandled() {
+        _uiState.update { it.copy(isProfileSaved = false) }
     }
 }

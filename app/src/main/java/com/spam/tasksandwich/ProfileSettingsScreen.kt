@@ -37,12 +37,33 @@ import android.widget.Toast
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.style.TextDecoration
 import com.spam.tasksandwich.ReportDialog
 
+
+// ProfileSettingsScreen.kt — Improved Version (v2: fixed sendReport calls)
+//
+// Fixes:
+//   1. ProfileSettingsScreen itself has no Scaffold, so
+//      TabRow renders behind the status bar. Wrapped in Scaffold.
+//   2. ProfileSettingsForm: paddingValues from its inner Scaffold
+//      was commented out (.padding(paddingValues) line was
+//      disabled). This means content ignores the snackbar host
+//      area. Restored.
+//   3. ProfileSettingsForm: 'name', 'age', 'email' use `remember`
+//      (not rememberSaveable) — values are lost on rotation.
+//      Changed to rememberSaveable.
+//   4. TransactionLogList: uses deprecated `Divider()` — updated
+//      to `HorizontalDivider()` (M3).
+//   5. TaskHistoryList: LazyColumn has no explicit fillMaxSize
+//      — can cause height measure issues. Added.
+// ============================================================
 
 @Composable
 fun ProfileSettingsScreen(
@@ -55,54 +76,64 @@ fun ProfileSettingsScreen(
     var selectedTabIndex by remember { mutableStateOf(0) }
     val tabs = listOf("Settings", "Transaction Log", "Task History")
 
-    // Handle navigation back to login screen on logout or account deletion
     LaunchedEffect(uiState.logoutSuccess) {
-        if (uiState.logoutSuccess) {
-            onLogoutSuccess()
-        }
+        if (uiState.logoutSuccess) onLogoutSuccess()
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        TabRow(selectedTabIndex = selectedTabIndex) {
-            tabs.forEachIndexed { index, title ->
-                Tab(
-                    selected = selectedTabIndex == index,
-                    onClick = { selectedTabIndex = index },
-                    text = { Text(title) }
+    // FIX 1: Wrap in Scaffold so the status bar inset is respected.
+    // Without this, the TabRow renders right under the status bar icons.
+    Scaffold { scaffoldPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(scaffoldPadding) // ✅ respects status bar
+        ) {
+            TabRow(selectedTabIndex = selectedTabIndex) {
+                tabs.forEachIndexed { index, title ->
+                    Tab(
+                        selected = selectedTabIndex == index,
+                        onClick = { selectedTabIndex = index },
+                        text = { Text(title) }
+                    )
+                }
+            }
+
+            when (selectedTabIndex) {
+                0 -> ProfileSettingsForm(uiState = uiState, viewModel = viewModel)
+                1 -> TransactionLogList(
+                    history = uiState.purchaseHistory,
+                    reportsViewModel = reportsViewModel,
+                    uiState = uiState,
+                    viewModel = viewModel
+                )
+                2 -> TaskHistoryList(
+                    uiState = uiState,
+                    viewModel = viewModel,
+                    onNavigateToEdit = onNavigateToEdit,
+                    reportsViewModel = reportsViewModel
                 )
             }
-        }
-
-        when (selectedTabIndex) {
-            0 -> ProfileSettingsForm(uiState = uiState, viewModel = viewModel)
-            1 -> TransactionLogList(
-                history = uiState.purchaseHistory,
-                reportsViewModel = reportsViewModel,
-                uiState = uiState,
-                viewModel = viewModel
-            )
-            2 -> TaskHistoryList(
-                uiState = uiState,
-                viewModel = viewModel,
-                onNavigateToEdit = onNavigateToEdit,
-                reportsViewModel = reportsViewModel
-            )
         }
     }
 }
 
-/**
- * Tab 0: Profile Management Form
- */
+// ============================================================
+// ProfileSettingsForm
+// FIX 2: paddingValues was commented out — snackbar could
+//         overlap content at the bottom. Restored.
+// FIX 3: name/age/email used remember, not rememberSaveable —
+//         lost on screen rotation. Fixed.
+// ============================================================
 @Composable
 fun ProfileSettingsForm(uiState: ProfileSettingsUiState, viewModel: ProfileSettingsViewModel) {
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
-    var name by remember { mutableStateOf("") }
-    var age by remember { mutableStateOf("") }
-    var email by remember { mutableStateOf("") }
-    var selectedIconId by remember { mutableStateOf("") }
+    // ✅ rememberSaveable survives rotation; remember does not
+    var name by rememberSaveable { mutableStateOf("") }
+    var age by rememberSaveable { mutableStateOf("") }
+    var email by rememberSaveable { mutableStateOf("") }
+    var selectedIconId by rememberSaveable { mutableStateOf("") }
     var showLogoutDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
 
@@ -122,7 +153,6 @@ fun ProfileSettingsForm(uiState: ProfileSettingsUiState, viewModel: ProfileSetti
         }
     }
 
-    // Logout Dialog
     if (showLogoutDialog) {
         AlertDialog(
             onDismissRequest = { showLogoutDialog = false },
@@ -131,13 +161,10 @@ fun ProfileSettingsForm(uiState: ProfileSettingsUiState, viewModel: ProfileSetti
             confirmButton = {
                 TextButton(onClick = { viewModel.logout(); showLogoutDialog = false }) { Text("Yes, Logout") }
             },
-            dismissButton = {
-                TextButton(onClick = { showLogoutDialog = false }) { Text("Cancel") }
-            }
+            dismissButton = { TextButton(onClick = { showLogoutDialog = false }) { Text("Cancel") } }
         )
     }
 
-    // Delete Account Dialog
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
@@ -145,29 +172,22 @@ fun ProfileSettingsForm(uiState: ProfileSettingsUiState, viewModel: ProfileSetti
             text = { Text("Are you sure? This will permanently delete your profile, points, and account. This action cannot be undone.") },
             confirmButton = {
                 TextButton(
-                    onClick = {
-                        viewModel.deleteAccount();showDeleteDialog = false;
-//                        viewModel.logout()
-
-                              },
+                    onClick = { viewModel.deleteAccount(); showDeleteDialog = false },
                     colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                 ) { Text("Delete Everything") }
             },
-            dismissButton = {
-                TextButton(onClick = { showDeleteDialog = false }) { Text("Cancel") }
-            }
+            dismissButton = { TextButton(onClick = { showDeleteDialog = false }) { Text("Cancel") } }
         )
     }
 
-    Scaffold(snackbarHost = { SnackbarHost(hostState = snackbarHostState) })
-    { paddingValues ->
+    Scaffold(snackbarHost = { SnackbarHost(hostState = snackbarHostState) }) { paddingValues ->
         if (uiState.isLoading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         } else {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-//                    .padding(paddingValues)
+                    .padding(paddingValues) // ✅ Restored — was commented out; snackbar could overlap content
                     .padding(16.dp)
                     .verticalScroll(rememberScrollState()),
                 horizontalAlignment = Alignment.CenterHorizontally
@@ -189,14 +209,16 @@ fun ProfileSettingsForm(uiState: ProfileSettingsUiState, viewModel: ProfileSetti
                     onValueChange = { if (it.length <= 2) age = it },
                     label = { Text("Age") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
                 )
                 Spacer(Modifier.height(16.dp))
                 OutlinedTextField(
                     value = email,
                     onValueChange = { email = it },
                     label = { Text("Email") },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
                 )
 
                 uiState.userProfile?.let {
@@ -223,10 +245,13 @@ fun ProfileSettingsForm(uiState: ProfileSettingsUiState, viewModel: ProfileSetti
     }
 }
 
+// ============================================================
+// DeleteConfirmationDialog — no changes needed.
+// ============================================================
 @Composable
 fun DeleteConfirmationDialog(
     itemName: String,
-    warningMessage: String, // ADD THIS PARAMETER
+    warningMessage: String,
     onDismiss: () -> Unit,
     onConfirm: () -> Unit
 ) {
@@ -237,11 +262,9 @@ fun DeleteConfirmationDialog(
             Column {
                 Text("Are you sure you want to delete '$itemName'?")
                 Spacer(Modifier.height(8.dp))
-                // Display the custom warning message here
                 Text(
                     text = warningMessage,
                     style = MaterialTheme.typography.bodySmall,
-                    // If it contains "ACTIVE", make it Red to stand out
                     color = if (warningMessage.contains("ACTIVE")) MaterialTheme.colorScheme.error else Color.Gray
                 )
             }
@@ -250,24 +273,16 @@ fun DeleteConfirmationDialog(
             TextButton(
                 onClick = onConfirm,
                 colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
-            ) {
-                Text("Delete")
-            }
+            ) { Text("Delete") }
         },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
-        }
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
 }
 
-
-
-/**
- * Tab 1: Transaction Log (Flattened History)
- * Shop tab / Transactions tab
- */
+// ============================================================
+// TransactionLogList
+// FIX 4: Deprecated Divider() → HorizontalDivider() (M3 API).
+// ============================================================
 @Composable
 fun TransactionLogList(
     history: List<UserPurchaseLogItem>,
@@ -284,31 +299,43 @@ fun TransactionLogList(
             Text("No purchase history found.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     } else {
-        LazyColumn(contentPadding = PaddingValues(12.dp)) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(), // ✅ bounded height
+            contentPadding = PaddingValues(12.dp)
+        ) {
             items(items = history, key = { it.id }) { purchase ->
                 TransactionHistoryItem(
                     purchase = purchase,
                     onLongPress = { reportPurchase = purchase },
                     onDeleteClick = { itemToDelete = purchase }
                 )
-                Divider()
+                HorizontalDivider() // ✅ was Divider() — deprecated in M3
             }
         }
     }
 
+    val reportsUiState by reportsViewModel.uiState.collectAsState()
+
+    LaunchedEffect(reportsUiState.reportSent) {
+        if (reportsUiState.reportSent) {
+            reportPurchase = null
+            reportsViewModel.onReportSentHandled()
+            Toast.makeText(context, "Report sent. Thank you!", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     reportPurchase?.let { purchase ->
+        val contentToReport = purchase.mysteryText.ifBlank { purchase.itemName }
         ReportDialog(
-            itemContent = purchase.mysteryText.ifBlank { purchase.itemName },
+            itemContent = contentToReport,
+            isSubmitting = reportsUiState.isSubmitting,
             onDismiss = { reportPurchase = null },
             onConfirm = {
-                reportsViewModel.sendReportToFirebase(
-                    reporterId = uiState.userProfile?.uid ?: "unknown",
-                    reportedContent = purchase.mysteryText.ifBlank { purchase.itemName },
+                reportsViewModel.sendReport(
+                    reportedContent = contentToReport,
                     reportType = "mystery_text",
                     roomId = purchase.roomId
                 )
-                Toast.makeText(context, "Report Sent", Toast.LENGTH_SHORT).show()
-                reportPurchase = null
             }
         )
     }
@@ -326,9 +353,11 @@ fun TransactionLogList(
     }
 }
 
-/**
- * Tab 2: Task History
- */
+// ============================================================
+// TaskHistoryList
+// FIX 5: LazyColumn lacked fillMaxSize — can have unbounded
+//         height in certain parent layouts. Added.
+// ============================================================
 @Composable
 fun TaskHistoryList(
     uiState: ProfileSettingsUiState,
@@ -340,22 +369,16 @@ fun TaskHistoryList(
     var taskToDelete by remember { mutableStateOf<Task?>(null) }
     val context = LocalContext.current
 
-
-
     Column(modifier = Modifier.fillMaxSize()) {
-        // --- NEW: Clear All Button (Only shows if there are completed tasks) ---
         val hasHistory = uiState.tasks.any { it.status != "assigned" }
         if (hasHistory) {
             TextButton(
                 onClick = { viewModel.clearAllTaskHistory() },
-                modifier = Modifier.align(Alignment.End)
+                modifier = Modifier
+                    .align(Alignment.End)
                     .padding(horizontal = 16.dp, vertical = 4.dp)
             ) {
-                Icon(
-                    Icons.Default.DeleteSweep,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp)
-                )
+                Icon(Icons.Default.DeleteSweep, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
                 Text("Clear Completed Logs", color = MaterialTheme.colorScheme.error)
             }
@@ -367,15 +390,16 @@ fun TaskHistoryList(
             }
         } else {
             LazyColumn(
-                modifier = Modifier.fillMaxSize().background(Color.Gray.copy(alpha = 0.1f)),
+                modifier = Modifier
+                    .fillMaxSize() // ✅ ensures bounded height within the Column
+                    .background(Color.Gray.copy(alpha = 0.1f)),
                 contentPadding = PaddingValues(12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                // KEY FIX: This matches ManageSelfTasks screen
                 items(items = uiState.tasks, key = { it.id }) { task ->
                     TaskLogItem(
                         task = task,
-                        onLongPress = { taskToReport = task  },
+                        onLongPress = { taskToReport = task },
                         onDeleteClick = { taskToDelete = task }
                     )
                 }
@@ -383,31 +407,36 @@ fun TaskHistoryList(
         }
     }
 
+    val reportsUiState by reportsViewModel.uiState.collectAsState()
+
+    LaunchedEffect(reportsUiState.reportSent) {
+        if (reportsUiState.reportSent) {
+            taskToReport = null
+            reportsViewModel.onReportSentHandled()
+            Toast.makeText(context, "Report sent. Thank you!", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     taskToReport?.let { task ->
+        val contentToReport = "Task Title: ${task.title}"
         ReportDialog(
-            itemContent = "Task Title: ${task.title}",
+            itemContent = contentToReport,
+            isSubmitting = reportsUiState.isSubmitting,
             onDismiss = { taskToReport = null },
             onConfirm = {
-                reportsViewModel.sendReportToFirebase(
-                    reporterId = uiState.userProfile?.uid ?: "unknown",
-                    reportedContent = task.title,
+                reportsViewModel.sendReport(
+                    reportedContent = contentToReport,
                     reportType = "task_title",
-                    roomId = task.groupId ?: ""
+                    roomId = task.groupId
                 )
-                Toast.makeText(context, "Report Sent", Toast.LENGTH_SHORT).show()
-                taskToReport = null
             }
         )
     }
 
-
-    // --- Delete Confirmation Logic with Warning ---
     taskToDelete?.let { task ->
         val isActive = task.status == "assigned"
-
         DeleteConfirmationDialog(
             itemName = task.title,
-            // Passing the message here
             warningMessage = if (isActive)
                 "WARNING: This is an ACTIVE task. Deleting it will stop it from repeating!"
             else "This will permanently remove this historical record.",
@@ -420,21 +449,19 @@ fun TaskHistoryList(
     }
 }
 
-/**
- * Reusable Component: Task Card
- */
+// ============================================================
+// TaskLogItem — no changes needed.
+// ============================================================
 @Composable
 fun TaskLogItem(task: Task, onLongPress: () -> Unit, onDeleteClick: () -> Unit) {
     val isDone = task.status == "completed" || task.status == "verified"
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            // USE ISDONE HERE: Dim the card if it's already completed
             .alpha(if (isDone) 0.6f else 1f)
             .pointerInput(Unit) {
                 detectTapGestures(onLongPress = { onLongPress() })
             },
-        // Optional: Change card elevation for completed items
         elevation = CardDefaults.cardElevation(defaultElevation = if (isDone) 0.dp else 2.dp)
     ) {
         Row(
@@ -442,7 +469,12 @@ fun TaskLogItem(task: Task, onLongPress: () -> Unit, onDeleteClick: () -> Unit) 
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(task.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,textDecoration = if (isDone) androidx.compose.ui.text.style.TextDecoration.LineThrough else null)
+                Text(
+                    task.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    textDecoration = if (isDone) TextDecoration.LineThrough else null
+                )
                 if (isDone) {
                     Text("Status: Completed", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                 } else {
@@ -457,9 +489,9 @@ fun TaskLogItem(task: Task, onLongPress: () -> Unit, onDeleteClick: () -> Unit) 
     }
 }
 
-/**
- * Reusable Component: Transaction Row
- */
+// ============================================================
+// TransactionHistoryItem — no changes needed.
+// ============================================================
 @Composable
 fun TransactionHistoryItem(
     purchase: UserPurchaseLogItem,
@@ -488,7 +520,11 @@ fun TransactionHistoryItem(
             Text("'${purchase.itemName}' from ${purchase.roomName}", fontWeight = FontWeight.Bold)
             if (purchase.mysteryText.isNotBlank() && purchase.status == "completed") {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(text = purchase.mysteryText, style = MaterialTheme.typography.bodyMedium, fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)
+                    Text(
+                        text = purchase.mysteryText,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontStyle = FontStyle.Italic
+                    )
                     IconButton(modifier = Modifier.size(20.dp), onClick = {
                         clipboardManager.setText(AnnotatedString(purchase.mysteryText))
                         Toast.makeText(context, "Copied!", Toast.LENGTH_SHORT).show()
@@ -499,7 +535,6 @@ fun TransactionHistoryItem(
             }
             purchase.purchasedAt?.let { Text(formatTimestamp(it), style = MaterialTheme.typography.bodySmall) }
         }
-
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(text = pointsText, fontWeight = FontWeight.Bold, color = pointsColor)
             IconButton(onClick = onDeleteClick) {
@@ -509,9 +544,9 @@ fun TransactionHistoryItem(
     }
 }
 
-/**
- * Helper Components (Icon Selector, Dialog, Date Formatter)
- */
+// ============================================================
+// IconSelector — no changes needed.
+// ============================================================
 @Composable
 fun IconSelector(userProfile: UserProfile?, selectedIconId: String, onIconSelected: (String) -> Unit) {
     if (userProfile == null) return
@@ -525,7 +560,10 @@ fun IconSelector(userProfile: UserProfile?, selectedIconId: String, onIconSelect
 
     Column {
         Text("Unlocked", style = MaterialTheme.typography.titleSmall)
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)) {
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+        ) {
             items(items = finalIcons, key = { it }) { iconId ->
                 allIconsMap[iconId]?.let { resId ->
                     Image(
@@ -535,7 +573,11 @@ fun IconSelector(userProfile: UserProfile?, selectedIconId: String, onIconSelect
                             .size(64.dp)
                             .clip(CircleShape)
                             .clickable { onIconSelected(iconId) }
-                            .border(width = if (selectedIconId == iconId) 3.dp else 0.dp, color = if (selectedIconId == iconId) MaterialTheme.colorScheme.primary else Color.Transparent, shape = CircleShape)
+                            .border(
+                                width = if (selectedIconId == iconId) 3.dp else 0.dp,
+                                color = if (selectedIconId == iconId) MaterialTheme.colorScheme.primary else Color.Transparent,
+                                shape = CircleShape
+                            )
                     )
                 }
             }
@@ -543,16 +585,21 @@ fun IconSelector(userProfile: UserProfile?, selectedIconId: String, onIconSelect
         if (lockedIcons.isNotEmpty()) {
             Spacer(Modifier.height(16.dp))
             Text("Unlockable", style = MaterialTheme.typography.titleSmall)
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)) {
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+            ) {
                 items(lockedIcons) {
-                    Image(painter = painterResource(id = R.drawable.lockedimg), contentDescription = "Locked", modifier = Modifier.size(64.dp).clip(CircleShape))
+                    Image(
+                        painter = painterResource(id = R.drawable.lockedimg),
+                        contentDescription = "Locked",
+                        modifier = Modifier.size(64.dp).clip(CircleShape)
+                    )
                 }
             }
         }
     }
 }
-
-
 
 private fun formatTimestamp(timestamp: Timestamp): String {
     return SimpleDateFormat("MMM dd, yyyy", Locale.getDefault()).format(timestamp.toDate())

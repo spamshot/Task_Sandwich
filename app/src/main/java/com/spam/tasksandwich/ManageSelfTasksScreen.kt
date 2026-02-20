@@ -185,7 +185,7 @@ fun ManageSelfTasksScreen(
 fun SelfTaskManageCard(task: Task, onDelete: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
         Row(
             modifier = Modifier.padding(16.dp).fillMaxWidth(),

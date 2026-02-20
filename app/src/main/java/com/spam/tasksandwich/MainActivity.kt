@@ -25,9 +25,11 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.google.android.gms.ads.AdListener
 import com.google.android.gms.ads.AdRequest
 import com.google.android.gms.ads.AdSize
 import com.google.android.gms.ads.AdView
+import com.google.android.gms.ads.LoadAdError
 import com.google.android.gms.ads.MobileAds
 import com.google.android.gms.ads.RequestConfiguration
 import com.google.firebase.appcheck.FirebaseAppCheck
@@ -123,6 +125,12 @@ fun AdmobBanner(modifier: Modifier = Modifier) {
                 // --- DEVELOPMENT SETTING ---
                 // Using Google's universal TEST ID to prevent Error Code 0 on emulators.
                 adUnitId = "ca-app-pub-3940256099942544/6300978111"
+
+                adListener = object : AdListener() {
+                    override fun onAdFailedToLoad(loadAdError: LoadAdError) {
+                        Log.e("AdmobBanner", "Ad failed to load: ${loadAdError.message}, code: ${loadAdError.code}, domain: ${loadAdError.domain}")
+                    }
+                }
 
                 // Create an ad request and load the ad.
                 loadAd(AdRequest.Builder().build())

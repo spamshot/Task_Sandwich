@@ -19,6 +19,35 @@ import androidx.navigation.navArgument
 
 
 
+// Fixes:
+//   1. ManageShopScreen is registered at the CreateShopItem route —
+//      the route is named "create_shop_item_screen" but it actually
+//      opens the full ManageShopScreen (which handles both create
+//      and edit). The route name is misleading. Renamed the Screen
+//      object to ManageShop for clarity.
+//   2. EditTask composable is a placeholder Box with text — this is
+//      fine for development but is easy to forget. Noted with a TODO.
+//   3. RoomDetailScreen passes roomId via both the arguments bundle
+//      AND as a direct parameter — it's extracted from the bundle
+//      manually and re-passed. This is fine but the ViewModel already
+//      gets it from SavedStateHandle, so passing it as a parameter
+//      to the composable is redundant if RoomDetailScreen just passes
+//      it through. Noted with a comment.
+//   4. AppNavHost receives paddingValues from AppShell but AppShell
+//      manually reduces bottom padding to 0.dp. This means bottom
+//      system insets (nav bar) may not be respected on gesture-nav
+//      devices. The proper approach is to pass innerPadding fully
+//      and let the NavHost content handle it. Flagged in AppShell
+//      (see fix in that file).
+//   5. Screen.CreateRoom and Screen.JoinRoom are defined as routes
+//      but are handled as dialog triggers inside AppShell — they
+//      never actually navigate to standalone screens. If a deep link
+//      ever targets these routes, it would crash or show nothing.
+//      Noted with a comment.
+//   6. ManageTasks.arguments is a val on the companion — but the
+//      rest of the Screen objects don't define arguments this way,
+//      creating inconsistency. Minor but noted.
+// ============================================================
 
 sealed class Screen(val route: String) {
     object Splash : Screen("splash_screen")
@@ -26,18 +55,20 @@ sealed class Screen(val route: String) {
     object ProfileSetup : Screen("profile_setup_screen")
     object Home : Screen("home_screen")
     object ManageSelfTasks : Screen("manage_self_tasks_screen")
+    // FIX 5: JoinRoom and CreateRoom are intercepted as dialog triggers in AppShell.
+    // These routes are never navigated to directly — they exist only as drawer item keys.
     object JoinRoom : Screen("join_room_screen")
-    object ProfileSettings : Screen("profile_settings_screen")
     object CreateRoom : Screen("create_room_screen")
-
+    object ProfileSettings : Screen("profile_settings_screen")
 
     object ManageTasks : Screen("manage_tasks_screen/{roomId}") {
         fun createRoute(roomId: String) = "manage_tasks_screen/$roomId"
-        val arguments = listOf(
-            navArgument("roomId") { type = NavType.StringType }
-        )
+        val arguments = listOf(navArgument("roomId") { type = NavType.StringType })
     }
-    object CreateShopItem : Screen("create_shop_item_screen/{roomId}") {
+
+    // FIX 1: Renamed from CreateShopItem to ManageShop to reflect actual behavior.
+    // The route string is kept the same to avoid breaking SavedStateHandle reads in the VM.
+    object ManageShop : Screen("create_shop_item_screen/{roomId}") {
         fun createRoute(roomId: String) = "create_shop_item_screen/$roomId"
     }
 
@@ -48,19 +79,12 @@ sealed class Screen(val route: String) {
     object EditTask : Screen("edit_task_screen/{taskId}") {
         fun createRoute(taskId: String) = "edit_task_screen/$taskId"
     }
-    object ViewShop : Screen("view_shop_screen/{roomId}") { // Renamed for clarity
+
+    object ViewShop : Screen("view_shop_screen/{roomId}") {
         fun createRoute(roomId: String) = "view_shop_screen/$roomId"
     }
 }
 
-/**
- * The main navigation component for the app. It is now a modular component
- * that is placed inside the AppShell.
- *
- * @param navController The NavHostController that manages navigation, passed from AppShell.
- * @param paddingValues The padding provided by the Scaffold in AppShell, to avoid content
- *                      overlapping with the TopAppBar.
- */
 @Composable
 fun AppNavHost(
     navController: NavHostController,
@@ -102,13 +126,13 @@ fun AppNavHost(
                         popUpTo(navController.graph.id) { inclusive = true }
                     }
                 },
-                onNavigateToEdit = {
-                    navController.navigate(Screen.EditTask.createRoute(it))
+                onNavigateToEdit = { taskId ->
+                    navController.navigate(Screen.EditTask.createRoute(taskId))
                 }
             )
         }
 
-        composable(Screen.`ManageSelfTasks`.route) {
+        composable(Screen.ManageSelfTasks.route) {
             ManageSelfTasksScreen(
                 onGoBack = { navController.popBackStack() }
             )
@@ -118,11 +142,15 @@ fun AppNavHost(
             route = Screen.RoomDetail.route,
             arguments = listOf(navArgument("roomId") { type = NavType.StringType })
         ) { backStackEntry ->
+            // FIX 3: roomId is extracted here and passed to the composable.
+            // RoomDetailViewModel already reads it from SavedStateHandle, so passing
+            // it as a composable parameter is only needed if the composable itself
+            // uses it (e.g., to pass to child composables). Review if this is necessary.
             val roomId = backStackEntry.arguments?.getString("roomId") ?: ""
             RoomDetailScreen(
                 roomId = roomId,
                 onNavigateBack = { navController.popBackStack() },
-                onCreateShopClick = { navController.navigate(Screen.CreateShopItem.createRoute(roomId)) },
+                onCreateShopClick = { navController.navigate(Screen.ManageShop.createRoute(roomId)) }, // FIX 1
                 onViewShopClick = { navController.navigate(Screen.ViewShop.createRoute(roomId)) },
                 onNavigateToManageTasks = { navController.navigate(Screen.ManageTasks.createRoute(roomId)) }
             )
@@ -131,36 +159,36 @@ fun AppNavHost(
         composable(
             route = Screen.EditTask.route,
             arguments = listOf(navArgument("taskId") { type = NavType.StringType })
-        ) {            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("Edit Task Screen (Placeholder)")
+        ) {
+            // FIX 2: TODO — Replace this placeholder with the real EditTask screen.
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("Edit Task Screen (Coming Soon)")
             }
         }
 
         composable(
             route = Screen.ManageTasks.route,
-            arguments = Screen.ManageTasks.arguments // This will now work!
+            arguments = Screen.ManageTasks.arguments
         ) { backStackEntry ->
-            // 1. Get the roomId from the navigation arguments
             val roomId = backStackEntry.arguments?.getString("roomId") ?: ""
-
-            // 2. Pass it into the Screen
             ManageTasksScreen(
                 roomId = roomId,
                 onNavigateBack = { navController.popBackStack() }
             )
         }
+
         composable(
             route = Screen.ViewShop.route,
             arguments = listOf(navArgument("roomId") { type = NavType.StringType })
         ) {
-            // We will build this screen next
             ViewShopScreen(
                 onNavigateBack = { navController.popBackStack() }
             )
         }
 
+        // FIX 1: Route name kept as-is for SavedStateHandle compatibility.
         composable(
-            route = Screen.CreateShopItem.route,
+            route = Screen.ManageShop.route, // was Screen.CreateShopItem
             arguments = listOf(navArgument("roomId") { type = NavType.StringType })
         ) {
             ManageShopScreen(

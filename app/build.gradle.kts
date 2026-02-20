@@ -64,6 +64,8 @@ dependencies {
     implementation(libs.firebase.appcheck.debug)
     implementation(libs.androidx.compose.foundation)
     implementation(libs.play.services.ads.api)
+    implementation(libs.androidx.foundation)
+    implementation(libs.androidx.material3)
 //    implementation(libs.firebase.functions.ktx)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

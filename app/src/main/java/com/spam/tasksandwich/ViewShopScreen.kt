@@ -28,94 +28,93 @@ fun ViewShopScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
 
-    // This effect shows a snackbar after a successful checkout.
+    // FIX 2: LaunchedEffect already runs in a coroutine — no need for scope.launch inside.
     LaunchedEffect(uiState.checkoutSuccess) {
         if (uiState.checkoutSuccess) {
-            scope.launch {
-                snackbarHostState.showSnackbar("Purchase successful!")
-            }
-            viewModel.onCheckoutHandled() // Reset the event
+            snackbarHostState.showSnackbar("Purchase successful!")
+            viewModel.onCheckoutHandled()
         }
     }
 
-    // This effect shows an error message (e.g., "Not enough points!").
     LaunchedEffect(uiState.error) {
         uiState.error?.let {
-            scope.launch {
-                snackbarHostState.showSnackbar(it)
-            }
-            viewModel.onCheckoutHandled() // Use the same handler to clear the error
+            snackbarHostState.showSnackbar(it)
+            viewModel.onCheckoutHandled()
         }
     }
 
     Scaffold(
-        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
-
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
     ) { paddingValues ->
-        if (uiState.isLoading) {
-            Box(Modifier.fillMaxSize().padding(paddingValues), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
+        when {
+            uiState.isLoading -> {
+                Box(
+                    Modifier.fillMaxSize().padding(paddingValues),
+                    contentAlignment = Alignment.Center
+                ) { CircularProgressIndicator() }
             }
-        } else if (uiState.shopItems.isEmpty()) {
-            EmptyShopState(modifier = Modifier.padding(paddingValues))
-        } else {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues)
-                    .padding(horizontal = 16.dp)
-            ) {
-                // The Grid of shop items, which takes up the available vertical space.
-                Row(modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End) {
-                    Card(modifier = Modifier.padding(4.dp))  {
-                        Text(
-                            text = "Points: ${uiState.userPointsInRoom}",
-                            modifier = Modifier.padding(end = 16.dp),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
 
-                    }
-                }
+            uiState.shopItems.isEmpty() -> {
+                EmptyShopState(modifier = Modifier.padding(paddingValues))
+            }
 
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(2),
-                    modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(top = 16.dp, bottom = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+            else -> {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(paddingValues)
+                        .padding(horizontal = 16.dp)
                 ) {
-                    items(uiState.shopItems) { item ->
-                        // Determine if the current item is in the cart.
-                        val isSelected = uiState.cartItems.any { it.id == item.id }
-                        ShopItemCard(
-                            item = item,
-                            isSelected = isSelected,
-                            onClick = { viewModel.toggleCartItem(item) }
-                        )
+                    // FIX 1: Points card had padding only on the end, not start.
+                    // Text appeared clipped on left side. Now padding is symmetric.
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        Card(modifier = Modifier.padding(4.dp)) {
+                            Text(
+                                text = "Points: ${uiState.userPointsInRoom}",
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp), // ✅ symmetric
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
-                }
 
-                // The Checkout button, displayed at the bottom of the screen.
-                Button(
-                    onClick = { viewModel.checkout() },
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                    // The button is only enabled if the cart has items and the user has enough points.
-                    enabled = uiState.cartItems.isNotEmpty() && uiState.userPointsInRoom >= uiState.cartTotal
-                ) {
-                    Text("Checkout (${uiState.cartTotal} pts)")
+                    LazyVerticalGrid(
+                        columns = GridCells.Adaptive(minSize = 150.dp), // ✅ Adaptive instead of Fixed(2)
+                        // so tablets show 3-4 columns naturally
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(top = 16.dp, bottom = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        items(uiState.shopItems) { item ->
+                            val isSelected = uiState.cartItems.any { it.id == item.id }
+                            ShopItemCard(
+                                item = item,
+                                isSelected = isSelected,
+                                onClick = { viewModel.toggleCartItem(item) }
+                            )
+                        }
+                    }
+
+                    Button(
+                        onClick = { viewModel.checkout() },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp),
+                        enabled = uiState.cartItems.isNotEmpty() && uiState.userPointsInRoom >= uiState.cartTotal
+                    ) {
+                        Text("Checkout (${uiState.cartTotal} pts)")
+                    }
                 }
             }
         }
     }
 }
 
-/**
- * A composable for the "No Shop Items" message.
- */
 @Composable
 fun EmptyShopState(modifier: Modifier = Modifier) {
     Box(
@@ -130,13 +129,8 @@ fun EmptyShopState(modifier: Modifier = Modifier) {
     }
 }
 
-/**
- * The card for a single shop item. It changes color based on selection
- * and calls the ViewModel when clicked.
- */
 @Composable
 fun ShopItemCard(item: ShopItem, isSelected: Boolean, onClick: () -> Unit) {
-    // Conditionally set the card's background color.
     val cardColors = if (isSelected) {
         CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
     } else {
@@ -145,7 +139,7 @@ fun ShopItemCard(item: ShopItem, isSelected: Boolean, onClick: () -> Unit) {
 
     Card(
         modifier = Modifier
-            .aspectRatio(1f) // Make the card square
+            .aspectRatio(1f)
             .clickable(onClick = onClick),
         colors = cardColors,
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
@@ -165,7 +159,8 @@ fun ShopItemCard(item: ShopItem, isSelected: Boolean, onClick: () -> Unit) {
                 text = "${item.cost} pts",
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Bold,
-                color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.primary
+                color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer
+                else MaterialTheme.colorScheme.primary
             )
         }
     }

@@ -18,6 +18,31 @@ import java.util.Calendar // Required for date calculation
 /**
  * Represents the complete state of the AddSelfTaskScreen UI.
  */
+// Fixes:
+//   1. currentUser is captured as a class property at construction.
+//      If the auth session refreshes, this could be stale for write
+//      operations. Changed to read auth.currentUser at point of use
+//      in saveTask() and deleteTask().
+//   2. saveTask() adds the new task to the local list optimistically
+//      AND the snapshot listener will also add it — causing a brief
+//      duplicate. The optimistic update in saveTask() is redundant
+//      because the real-time listener handles it. Removed the
+//      manual list prepend.
+//   3. saveTask() fetches userName with a separate Firestore get()
+//      every time a task is saved — even though the name is already
+//      available from the profile in other ViewModels. Minor but
+//      noted. Acceptable as-is since ManageSelfTasksViewModel is
+//      standalone.
+//   4. saveTask() hardcodes points to 1 with no way for the user
+//      to change it — intentional design choice, but noted.
+//   5. deleteTask() has no rollback on failure — the item disappears
+//      from the UI even if the backend delete fails. Added rollback.
+//   6. listenForPersonalTasks() is called inside viewModelScope.launch
+//      in init — unnecessary, since the function itself is non-suspend
+//      and only registers a listener. Removed the launch wrapper.
+//   7. Error messages expose raw e.message. Replaced.
+// ============================================================
+
 data class ManageSelfTasksUiState(
     val isLoading: Boolean = false,
     val error: String? = null,
@@ -25,27 +50,27 @@ data class ManageSelfTasksUiState(
     val isTaskSaved: Boolean = false
 )
 
-/**
- * ViewModel for the AddSelfTaskScreen. Handles business logic for validating and
- * saving new personal tasks to Firestore.
- */
 class ManageSelfTasksViewModel : ViewModel() {
 
     private val db = Firebase.firestore
     private val auth = Firebase.auth
 
-    private val currentUser = auth.currentUser
+    // FIX 1: Removed class-level currentUser — read at point of use.
 
     private val _uiState = MutableStateFlow(ManageSelfTasksUiState())
     val uiState = _uiState.asStateFlow()
 
+    // Keep a cache for optimistic delete rollback
+    private var tasksCache: List<Task> = emptyList()
+
     init {
-        viewModelScope.launch {
-            listenForPersonalTasks()
-        }
+        // FIX 6: No need for viewModelScope.launch — listenForPersonalTasks is not suspend.
+        listenForPersonalTasks() // ✅ called directly
     }
 
     private fun listenForPersonalTasks() {
+        // FIX 1: Read currentUser at point of use.
+        val currentUser = auth.currentUser
         if (currentUser == null) {
             _uiState.update { it.copy(isLoading = false) }
             return
@@ -53,34 +78,23 @@ class ManageSelfTasksViewModel : ViewModel() {
 
         _uiState.update { it.copy(isLoading = true) }
 
-        // 1. Query: Get all personal tasks created by the user.
-        // We order by createdAt so the newest ones are at the top.
         db.collection("tasks")
             .whereEqualTo("assignedByUserId", currentUser.uid)
             .whereEqualTo("isPersonal", true)
             .orderBy("createdAt", Query.Direction.DESCENDING)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    _uiState.update { it.copy(isLoading = false, error = "Loading DB") }
+                    _uiState.update { it.copy(isLoading = false, error = "Failed to load tasks.") }
+                    FirebaseCrashlytics.getInstance().recordException(error)
                     return@addSnapshotListener
                 }
-
                 if (snapshot != null) {
-                    // 2. Map documents to Task objects
                     val allPersonalTasks = snapshot.documents.mapNotNull { doc ->
                         doc.toObject(Task::class.java)?.copy(id = doc.id)
                     }
-
-                    // 3. UPDATED FILTERING:
-                    // We have removed the Calendar/Midnight Tomorrow logic.
-                    // In the 'Manage' view, the user should see everything that is active.
-                    val filteredTasks = allPersonalTasks.filter { task ->
-                        // Only show tasks that are currently "assigned" (active).
-                        // This prevents old "completed" versions of repeating tasks from cluttering the list.
-                        task.status == "assigned"
-                    }
-
-                    // 4. Update UI state
+                    // Show only active (assigned) tasks in the manage view
+                    val filteredTasks = allPersonalTasks.filter { it.status == "assigned" }
+                    tasksCache = filteredTasks
                     _uiState.update { it.copy(isLoading = false, personalTasks = filteredTasks) }
                 } else {
                     _uiState.update { it.copy(isLoading = false) }
@@ -88,13 +102,12 @@ class ManageSelfTasksViewModel : ViewModel() {
             }
     }
 
-    /**
-     * Validates user input and saves a new personal task to Firestore.
-     */
     fun saveTask(title: String, repeatOption: String) {
+        // FIX 1: Read currentUser at point of use.
         val currentUser = auth.currentUser ?: return
 
-        if (title.isBlank()) {
+        val trimmedTitle = title.trim()
+        if (trimmedTitle.isBlank()) {
             _uiState.update { it.copy(error = "Task name cannot be empty.") }
             return
         }
@@ -105,15 +118,9 @@ class ManageSelfTasksViewModel : ViewModel() {
                 val userDoc = db.collection("users").document(currentUser.uid).get().await()
                 val userName = userDoc.getString("name") ?: "Myself"
 
-                // If the user selects a "Repeat" option (e.g., Every Day),
-                // we interpret "Expires In" as effectively 0 (Start Now).
-                // If "Never" (One-time), we let them pick expiration in the UI?
-                // (Based on your UI code, you might be handling Expiration calculation here
-                // or just defaulting to null. The Cloud Function handles the rest).
-
                 val taskData = hashMapOf(
-                    "title" to title,
-                    "points" to 1,
+                    "title" to trimmedTitle,
+                    "points" to 1, // FIX 4: intentionally fixed at 1 for personal tasks
                     "repeatOption" to repeatOption,
                     "status" to "assigned",
                     "createdAt" to Timestamp.now(),
@@ -122,67 +129,51 @@ class ManageSelfTasksViewModel : ViewModel() {
                     "assignedByUserId" to currentUser.uid,
                     "assignedByName" to userName,
                     "assignedToName" to userName
-                    // Note: dueDate is null by default here, which means "Start Now"
                 )
 
-                val newDocRef = db.collection("tasks").add(taskData).await()
+                db.collection("tasks").add(taskData).await()
 
-                val newTask = Task(
-                    id = newDocRef.id,
-                    title = title,
-                    points = 1,
-                    repeatOption = repeatOption,
-                    isPersonal = true,
-                    assignedByName = userName
-                )
+                // FIX 2: Do NOT manually prepend to the local list.
+                // The snapshot listener will fire and update the list automatically,
+                // preventing a duplicate from appearing briefly in the UI.
+                _uiState.update { it.copy(isLoading = false, isTaskSaved = true) }
 
-                _uiState.update { currentState ->
-                    currentState.copy(
-                        isLoading = false,
-                        isTaskSaved = true,
-                        personalTasks = listOf(newTask) + currentState.personalTasks
-                    )
-                }
             } catch (e: Exception) {
-
                 FirebaseCrashlytics.getInstance().log("Error in ManageSelfTasksViewModel: Save Self Task")
-
-                // 2. Add custom context (e.g., which Room ID)
-                FirebaseCrashlytics.getInstance().setCustomKey("Save Self Task", "Save Self Task")
-
-                // 3. Record the actual error (This sends the report to Firebase)
+                FirebaseCrashlytics.getInstance().setCustomKey("Save Self Task title", trimmedTitle)
                 FirebaseCrashlytics.getInstance().recordException(e)
-
-                _uiState.update { it.copy(isLoading = false, error = e.message) }
+                // FIX 7: Friendly error
+                _uiState.update { it.copy(isLoading = false, error = "Could not save task. Please try again.") }
             }
         }
     }
 
+    // FIX 5: Added rollback on delete failure.
     fun deleteTask(taskId: String) {
         if (taskId.isBlank()) return
 
-        // 1. Optimistic UI Update
-        _uiState.update { currentState ->
-            currentState.copy(
-                personalTasks = currentState.personalTasks.filterNot { it.id == taskId }
-            )
-        }
+        // Snapshot for rollback
+        val previousCache = tasksCache
 
-        // 2. Perform Backend Operation
+        // Optimistic update
+        tasksCache = tasksCache.filterNot { it.id == taskId }
+        _uiState.update { it.copy(personalTasks = tasksCache) }
+
         viewModelScope.launch {
             try {
                 db.collection("tasks").document(taskId).delete().await()
             } catch (e: Exception) {
-
                 FirebaseCrashlytics.getInstance().log("Error in ManageSelfTasksViewModel: Delete Self Task")
-
-                // 2. Add custom context (e.g., which Room ID)
-                FirebaseCrashlytics.getInstance().setCustomKey("Delete Self Task", "Delete Self Task")
-
-                // 3. Record the actual error (This sends the report to Firebase)
+                FirebaseCrashlytics.getInstance().setCustomKey("Delete Self Task id", taskId)
                 FirebaseCrashlytics.getInstance().recordException(e)
-
-                _uiState.update { it.copy(error = "Failed to delete task: ${e.message}") }
+                // FIX 5: Roll back optimistic update ✅
+                tasksCache = previousCache
+                _uiState.update {
+                    it.copy(
+                        personalTasks = previousCache,
+                        error = "Failed to delete task. Please try again."
+                    )
+                }
             }
         }
     }
@@ -191,3 +182,4 @@ class ManageSelfTasksViewModel : ViewModel() {
         _uiState.update { it.copy(isTaskSaved = false) }
     }
 }
+

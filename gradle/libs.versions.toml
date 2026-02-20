@@ -1,5 +1,5 @@
 [versions]
-agp = "9.0.0"
+agp = "9.0.1"
 kotlin = "2.3.10"
 coreKtx = "1.17.0"
 junit = "4.13.2"
@@ -18,6 +18,8 @@ uiText = "1.10.2"
 firebaseAppcheckDebug = "19.0.2"
 foundation = "1.10.2"
 playServicesAdsApi = "24.9.0"
+foundationVersion = "1.10.3"
+material3 = "1.4.0"
 #firebaseFunctionsKtx = "22.1.0"
 
 
@@ -45,6 +47,8 @@ androidx-compose-ui-text = { group = "androidx.compose.ui", name = "ui-text", ve
 firebase-appcheck-debug = { group = "com.google.firebase", name = "firebase-appcheck-debug", version.ref = "firebaseAppcheckDebug" }
 androidx-compose-foundation = { group = "androidx.compose.foundation", name = "foundation", version.ref = "foundation" }
 play-services-ads-api = { group = "com.google.android.gms", name = "play-services-ads-api", version.ref = "playServicesAdsApi" }
+androidx-foundation = { group = "androidx.compose.foundation", name = "foundation", version.ref = "foundationVersion" }
+androidx-material3 = { group = "androidx.compose.material3", name = "material3", version.ref = "material3" }
 #firebase-functions-ktx = { group = "com.google.firebase", name = "firebase-functions-ktx", version.ref = "firebaseFunctionsKtx" }
 
 [plugins]

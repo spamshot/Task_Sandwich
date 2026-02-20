@@ -13,6 +13,26 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 
+// Fixes:
+//   1. fetchAssignedTasks() uses addSnapshotListener but the
+//      function is named "fetch" implying a one-time read.
+//      The real-time listener is correct behavior, but the
+//      name is misleading. Renamed to listenForAssignedTasks().
+//   2. snapshot.toObjects(Task::class.java).mapIndexed is used
+//      to manually pair tasks with their document IDs via index.
+//      This is fragile — toObjects() and documents[] must stay
+//      in the same order, which is not guaranteed after filtering.
+//      Changed to the safer mapNotNull { doc -> doc.toObject()?.copy(id = doc.id) }
+//      pattern used consistently in other ViewModels.
+//   3. deleteTask() performs optimistic UI update but doesn't
+//      restore the item on failure. At minimum the error message
+//      should tell the user the task wasn't deleted. Added.
+//   4. No input validation on deleteTask() — blank taskId would
+//      silently call delete() on an empty document path.
+//      Added blank check (already fixed in ProfileSettingsViewModel
+//      but missing here).
+// ============================================================
+
 data class TaskSettingsUiState(
     val isLoading: Boolean = true,
     val tasks: List<Task> = emptyList(),
@@ -26,64 +46,69 @@ class TaskSettingsViewModel : ViewModel() {
     private val _uiState = MutableStateFlow(TaskSettingsUiState())
     val uiState = _uiState.asStateFlow()
 
+    // Keep a cache for optimistic update rollback
+    private var tasksCache: List<Task> = emptyList()
+
     init {
-        fetchAssignedTasks()
+        listenForAssignedTasks() // FIX 1: renamed from fetchAssignedTasks
     }
 
-    private fun fetchAssignedTasks() {
+    // FIX 1: Renamed to reflect it's a real-time listener, not a one-shot fetch.
+    private fun listenForAssignedTasks() {
         val currentUser = auth.currentUser
         if (currentUser == null) {
             _uiState.update { it.copy(isLoading = false, error = "User not logged in.") }
             return
         }
 
-        // Query for all tasks created by the current user, order by most recent
         db.collection("tasks")
             .whereEqualTo("assignedToUserId", currentUser.uid)
             .orderBy("createdAt", Query.Direction.DESCENDING)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
                     _uiState.update { it.copy(isLoading = false, error = "Failed to load tasks.") }
+                    FirebaseCrashlytics.getInstance().recordException(error)
                     return@addSnapshotListener
                 }
                 if (snapshot != null) {
-                    val taskList = snapshot.toObjects(Task::class.java).mapIndexed { index, task ->
-                        task.copy(id = snapshot.documents[index].id) // Manually add the document ID
+                    // FIX 2: Safe ID mapping via mapNotNull instead of index-based pairing.
+                    val taskList = snapshot.documents.mapNotNull { doc ->
+                        doc.toObject(Task::class.java)?.copy(id = doc.id) // ✅ safe, index-independent
                     }
+                    tasksCache = taskList
                     _uiState.update { it.copy(isLoading = false, tasks = taskList) }
                 }
             }
     }
 
     fun deleteTask(taskId: String) {
-        // 1. Optimistic UI Update: Immediately remove the task from the local state.
-        _uiState.update { currentState ->
-            currentState.copy(
-                tasks = currentState.tasks.filterNot { it.id == taskId }
-            )
-        }
+        // FIX 4: Guard against blank taskId silently deleting a bad path.
+        if (taskId.isBlank()) return
 
-        // 2. Perform the backend operation.
+        // Snapshot of current list for rollback on failure.
+        val previousTasks = tasksCache
+
+        // Optimistic update
+        tasksCache = tasksCache.filterNot { it.id == taskId }
+        _uiState.update { it.copy(tasks = tasksCache) }
+
         viewModelScope.launch {
             try {
                 db.collection("tasks").document(taskId).delete().await()
-                // If this succeeds, the real-time listener will eventually get the
-                // same state we already set, so the UI won't change again.
             } catch (e: Exception) {
-
                 FirebaseCrashlytics.getInstance().log("Error in TaskSettingsViewModel: Delete Task")
-
-                // 2. Add custom context (e.g., which Room ID)
-                FirebaseCrashlytics.getInstance().setCustomKey("Delete Task", "Failed to delete task")
-
-                // 3. Record the actual error (This sends the report to Firebase)
+                FirebaseCrashlytics.getInstance().setCustomKey("Delete Task id", taskId)
                 FirebaseCrashlytics.getInstance().recordException(e)
 
-                _uiState.update { it.copy(error = "Failed to delete task: ${e.message}") }
-                // OPTIONAL: In a more complex app, you could add logic here
-                // to add the task back to the list if the deletion fails,
-                // and show a "Couldn't delete task" snackbar.
-                // For now, just showing the error is sufficient.
+                // FIX 3: Roll back the optimistic update on failure so the
+                // user knows the task was NOT deleted and can try again.
+                tasksCache = previousTasks
+                _uiState.update {
+                    it.copy(
+                        tasks = previousTasks,
+                        error = "Failed to delete task. Please try again."
+                    )
+                }
             }
         }
     }

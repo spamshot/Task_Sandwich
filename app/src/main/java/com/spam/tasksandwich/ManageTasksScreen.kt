@@ -233,12 +233,6 @@ fun ManageTasksScreen(
                             if (expiresInDays == 0)Text("0 days is never", style = MaterialTheme.typography.bodySmall)
 
 
-                        }else{
-                            // saftey net, for adding assign to member then plugging in a repeats. its a bug catch
-                            expiresInDays = 0
-                        }
-                        if (expiresInDays != 0) {
-                            repeatOption = "Never"
                         }
                         //Checks if the task is going to all users.
                         val canAutoAssign = assignedTo?.userId == "all"
