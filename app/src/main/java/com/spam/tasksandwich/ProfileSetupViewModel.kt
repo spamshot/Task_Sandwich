@@ -26,18 +26,11 @@ class ProfileSetupViewModel : ViewModel() {
     private val _uiState = MutableStateFlow(ProfileSetupUiState())
     val uiState = _uiState.asStateFlow()
 
-    fun saveProfile(name: String, age: String) {
-        // FIX 3: Trim whitespace from name before validation.
-        val trimmedName = name.trim()
-
-        if (trimmedName.isBlank() || trimmedName.length > 10) {
-            _uiState.update { it.copy(error = "Name must be between 1 and 10 characters.") }
+    fun saveProfile(name: String, age: String, role: String) {
+        if (name.isBlank() || name.length > 10) {
+            _uiState.update { it.copy(error = "Name cannot be empty & must be less than 10 characters.") }
             return
         }
-
-        // FIX 2: Clamp age to a valid range instead of accepting any number.
-        val ageInt = age.toIntOrNull()
-        val validatedAge = if (ageInt != null && ageInt in 1..120) ageInt else null
 
         val currentUser = auth.currentUser
         if (currentUser == null) {
@@ -46,12 +39,12 @@ class ProfileSetupViewModel : ViewModel() {
         }
 
         val userProfile = hashMapOf(
-            "name" to trimmedName, // ✅ trimmed
-            "age" to validatedAge, // ✅ validated range or null
+            "name" to name,
+            "age" to age.toIntOrNull(),
             "email" to currentUser.email,
             "selectedIconId" to "avatar_1",
             "selectedBackgroundId" to "bg_stars",
-            "role" to "parent" // TODO: make this a user choice in a future step
+            "role" to role // ✅ now set by user choice instead of hardcoded
         )
 
         viewModelScope.launch {
@@ -65,13 +58,8 @@ class ProfileSetupViewModel : ViewModel() {
                 FirebaseCrashlytics.getInstance().log("Error in ProfileSetupViewModel: Save Profile")
                 FirebaseCrashlytics.getInstance().setCustomKey("Save Profile", "Set up profile failed to save")
                 FirebaseCrashlytics.getInstance().recordException(e)
-                _uiState.update { it.copy(isLoading = false, error = "Could not save profile. Please try again.") }
+                _uiState.update { it.copy(isLoading = false, error = e.message) }
             }
         }
-    }
-
-    // FIX 4: Reset flag after navigation so back-navigation doesn't re-trigger it.
-    fun onProfileSaveHandled() {
-        _uiState.update { it.copy(isProfileSaved = false) }
     }
 }

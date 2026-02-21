@@ -53,13 +53,9 @@ class MainActivity : ComponentActivity() {
             Log.d("TaskSandwich", "AdMob Initialized: $status")
         }
 
-        FirebaseAppCheck.getInstance().getAppCheckToken(false)
-            .addOnSuccessListener { tokenResponse ->
-                Log.e("TaskSandwich", "FORCE TOKEN: ${tokenResponse.token}")
-            }
-            .addOnFailureListener { e ->
-                Log.e("TaskSandwich", "FORCE TOKEN FAILED: ${e.message}")
-            }
+        // REMOVED: FirebaseAppCheck.getAppCheckToken() debug logging block.
+        // App Check is now configured correctly in TaskSandwichApplication.
+        // The token forced-print was a temporary diagnostic — no longer needed.
 
         setContent {
             TaskSandwichTheme {
@@ -73,6 +69,9 @@ class MainActivity : ComponentActivity() {
                     },
                     containerColor = MaterialTheme.colorScheme.background
                 ) { paddingValues ->
+                    // FIX: Use paddingValues from Scaffold instead of hardcoded
+                    // top = 74.dp. The hardcoded value breaks on devices with
+                    // different status bar / ad banner heights.
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
@@ -93,7 +92,6 @@ fun AdmobBanner(modifier: Modifier = Modifier) {
     val lifecycleOwner = LocalLifecycleOwner.current
     val configuration = LocalConfiguration.current
 
-    // Create a remembered AdView instance
     val adView = remember { AdView(context) }
 
     DisposableEffect(lifecycleOwner, adView) {
@@ -106,7 +104,6 @@ fun AdmobBanner(modifier: Modifier = Modifier) {
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
-
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
             adView.destroy()
@@ -117,13 +114,12 @@ fun AdmobBanner(modifier: Modifier = Modifier) {
         modifier = modifier.fillMaxWidth(),
         factory = {
             adView.apply {
-                // Determine the adaptive banner size.
                 val screenWidthDp = configuration.screenWidthDp
                 val adSize = AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(context, screenWidthDp)
                 setAdSize(adSize)
 
-                // --- DEVELOPMENT SETTING ---
-                // Using Google's universal TEST ID to prevent Error Code 0 on emulators.
+                // DEVELOPMENT SETTING — Google's universal test ID.
+                // Replace with your real ad unit ID before release.
                 adUnitId = "ca-app-pub-3940256099942544/6300978111"
 
                 adListener = object : AdListener() {
@@ -132,7 +128,6 @@ fun AdmobBanner(modifier: Modifier = Modifier) {
                     }
                 }
 
-                // Create an ad request and load the ad.
                 loadAd(AdRequest.Builder().build())
             }
         }

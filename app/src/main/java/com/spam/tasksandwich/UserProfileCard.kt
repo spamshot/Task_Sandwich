@@ -1,14 +1,17 @@
 package com.spam.tasksandwich
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -31,58 +34,93 @@ fun UserProfileCard(
     pointsInRoom: Int,
     totalPoints: Int,
     iconId: String,
-    modifier: Modifier = Modifier // this param was being ignored
+    modifier: Modifier = Modifier
 ) {
     val resId = AllIconsMap[iconId] ?: R.drawable.carrotdog
 
-    Card(
-        // FIX 1: Chain the caller's modifier instead of ignoring it.
-        // Before: modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp)
-        // The passed-in `modifier` was silently dropped, so callers couldn't
-        // customize positioning, padding, or size.
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(vertical = 24.dp), // ✅ caller's modifier respected first
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        // Avatar
+        Surface(
+            modifier = Modifier.size(80.dp),
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.primaryContainer,
+            border = BorderStroke(3.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
+        ) {
+            Image(
+                painter = painterResource(id = resId),
+                contentDescription = "Avatar for $name",
+                modifier = Modifier
+                    .size(80.dp)
+                    .clip(CircleShape)
+            )
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        // Name
+        Text(
+            text = name,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.ExtraBold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+
+        Spacer(Modifier.height(12.dp))
+
+        // Points row — two badge pills side by side
         Row(
-            modifier = Modifier.padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // FIX 2: Surface behind avatar handles transparent icon images.
+            // Room points pill
             Surface(
-                modifier = Modifier.size(64.dp),
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.surfaceVariant // ✅ fallback bg for transparent icons
+                shape = RoundedCornerShape(20.dp),
+                color = Color(0xFFE8F0FE),
+                border = BorderStroke(1.dp, Color(0xFFC7D7FC))
             ) {
-                Image(
-                    painter = painterResource(id = resId),
-                    contentDescription = "Avatar for $name", // ✅ more descriptive for accessibility
-                    modifier = Modifier
-                        .size(64.dp)
-                        .clip(CircleShape)
-                )
+                Column(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        "$pointsInRoom pts",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color(0xFF3B6BDC)
+                    )
+                    Text(
+                        "in this room",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFF3B6BDC).copy(alpha = 0.7f)
+                    )
+                }
             }
 
-            Spacer(Modifier.width(16.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = name,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "$pointsInRoom pts (in this room)",
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Text(
-                    text = "$totalPoints pts (total)",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.secondary
-                )
+            // Total points pill
+            Surface(
+                shape = RoundedCornerShape(20.dp),
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.3f))
+            ) {
+                Column(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        "$totalPoints pts",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                    Text(
+                        "all time",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.7f)
+                    )
+                }
             }
         }
     }

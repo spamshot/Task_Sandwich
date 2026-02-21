@@ -1,5 +1,9 @@
 package com.spam.tasksandwich
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -16,11 +20,19 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -30,63 +42,37 @@ fun ManageShopScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var selectedTabIndex by remember { mutableStateOf(0) }
-    val tabs = listOf("Pending", "History", "Shop Items")
     var showClearHistoryDialog by remember { mutableStateOf(false) }
-    var showAddItemDialog by remember { mutableStateOf(false) }
-    var itemToAction by remember { mutableStateOf<ShopItem?>(null) }
+    var showAddItemSheet by remember { mutableStateOf(false) }
     var itemToEdit by remember { mutableStateOf<ShopItem?>(null) }
+    var itemToDelete by remember { mutableStateOf<ShopItem?>(null) }
 
-    if (showAddItemDialog) {
-        EditShopItemDialog(
-            roomName = uiState.roomName,
-            item = ShopItem(name = "", cost = 0, mysteryText = ""),
-            onDismiss = { showAddItemDialog = false },
-            onConfirm = { newName, newCost, newMysteryText, newAutoRedeem ->
-                viewModel.addShopItem(newName, newCost, newMysteryText, newAutoRedeem)
-                showAddItemDialog = false
-            },
-            isCreating = true
-        )
-    }
+    val pendingCount = uiState.pendingPurchases.size
 
-    if (itemToAction != null) {
+    // Delete confirmation dialog
+    if (itemToDelete != null) {
         AlertDialog(
-            onDismissRequest = { itemToAction = null },
-            title = { Text("Item Options") },
-            text = { Text("What would you like to do with '${itemToAction!!.name}'?") },
+            onDismissRequest = { itemToDelete = null },
+            title = { Text("Delete Item") },
+            text = { Text("Delete '${itemToDelete!!.name}' from the shop? This cannot be undone.") },
             confirmButton = {
-                TextButton(onClick = { itemToEdit = itemToAction; itemToAction = null }) {
-                    Text("Edit")
-                }
+                TextButton(
+                    onClick = { viewModel.deleteShopItem(itemToDelete!!.id); itemToDelete = null },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) { Text("Delete") }
             },
             dismissButton = {
-                Row {
-                    TextButton(
-                        onClick = { viewModel.deleteShopItem(itemToAction!!.id); itemToAction = null }
-                    ) { Text("Delete", color = MaterialTheme.colorScheme.error) }
-                    TextButton(onClick = { itemToAction = null }) { Text("Cancel") }
-                }
+                TextButton(onClick = { itemToDelete = null }) { Text("Cancel") }
             }
         )
     }
 
-    if (itemToEdit != null) {
-        EditShopItemDialog(
-            roomName = uiState.roomName,
-            item = itemToEdit!!,
-            onDismiss = { itemToEdit = null },
-            onConfirm = { updatedName, updatedCost, updatedMysteryText, updatedAutoRedeem ->
-                viewModel.updateShopItem(itemToEdit!!.id, updatedName, updatedCost, updatedMysteryText, updatedAutoRedeem)
-                itemToEdit = null
-            }
-        )
-    }
-
+    // Clear history confirmation
     if (showClearHistoryDialog) {
         AlertDialog(
             onDismissRequest = { showClearHistoryDialog = false },
             title = { Text("Clear Purchase History?") },
-            text = { Text("This will permanently delete all completed and refunded items from the log. This action cannot be undone.") },
+            text = { Text("This will permanently delete all completed and refunded items from the log. This cannot be undone.") },
             confirmButton = {
                 TextButton(
                     onClick = { viewModel.clearRoomHistory(); showClearHistoryDialog = false },
@@ -99,44 +85,154 @@ fun ManageShopScreen(
         )
     }
 
+    // Add item bottom sheet
+    if (showAddItemSheet) {
+        ShopItemBottomSheet(
+            roomName = uiState.roomName,
+            item = null,
+            onDismiss = { showAddItemSheet = false },
+            onConfirm = { name, cost, mysteryText, autoRedeem ->
+                viewModel.addShopItem(name, cost, mysteryText, autoRedeem)
+                showAddItemSheet = false
+            }
+        )
+    }
+
+    // Edit item bottom sheet
+    itemToEdit?.let { item ->
+        ShopItemBottomSheet(
+            roomName = uiState.roomName,
+            item = item,
+            onDismiss = { itemToEdit = null },
+            onConfirm = { name, cost, mysteryText, autoRedeem ->
+                viewModel.updateShopItem(item.id, name, cost, mysteryText, autoRedeem)
+                itemToEdit = null
+            }
+        )
+    }
+
     Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        text = if (uiState.roomName.isNotBlank()) uiState.roomName else "Manage Shop",
+                        fontWeight = FontWeight.ExtraBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        color = Color.White
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = Color.White
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color(0xFF1A1A2E),
+                    scrolledContainerColor = Color(0xFF1A1A2E)
+                )
+            )
+        },
         floatingActionButton = {
-            if (selectedTabIndex == 2) {
-                FloatingActionButton(onClick = { showAddItemDialog = true }) {
-                    Icon(Icons.Default.Add, contentDescription = "Add Shop Item")
+            if (selectedTabIndex == 1) {
+                FloatingActionButton(
+                    onClick = { showAddItemSheet = true },
+                    containerColor = Color(0xFF1A1A2E)
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "Add Shop Item", tint = Color.White)
                 }
             }
         }
     ) { paddingValues ->
-        // FIX 1 + 2: paddingValues was commented out.
-        // This caused:
-        //   - The TabRow to render under the status bar (top inset ignored)
-        //   - The FAB to overlap the last list item (bottom inset ignored)
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues) // ✅ restored — was commented out
+                .padding(paddingValues)
         ) {
-            TabRow(selectedTabIndex = selectedTabIndex) {
-                tabs.forEachIndexed { index, title ->
-                    Tab(
-                        selected = selectedTabIndex == index,
-                        onClick = { selectedTabIndex = index },
-                        text = { Text(title) }
-                    )
-                }
-            }
+            ShopTabSelector(
+                selectedIndex = selectedTabIndex,
+                pendingCount = pendingCount,
+                onTabSelected = { selectedTabIndex = it }
+            )
 
-            // FIX: Give tab content a weight so it fills remaining space,
-            // preventing LazyColumns from having unbounded height.
             Box(modifier = Modifier.weight(1f)) {
                 when (selectedTabIndex) {
-                    0 -> PendingPurchasesList(uiState.pendingPurchases, viewModel)
-                    1 -> PurchaseHistoryList(
+                    0 -> PendingPurchasesList(
+                        purchases = uiState.pendingPurchases,
+                        onApprove = { viewModel.completePurchase(it) },
+                        onRefund = { viewModel.refundPurchase(it) }
+                    )
+                    1 -> ShopItemsList(
+                        items = uiState.existingItems,
+                        onEditClick = { itemToEdit = it },
+                        onDeleteClick = { itemToDelete = it }
+                    )
+                    2 -> PurchaseHistoryList(
                         history = uiState.purchaseHistory,
                         onClearHistory = { showClearHistoryDialog = true }
                     )
-                    2 -> ShopItemsList(uiState.existingItems) { itemToAction = it }
+                }
+            }
+        }
+    }
+}
+
+// ============================================================
+// ShopTabSelector — pill style with pending badge on tab 0
+// ============================================================
+@Composable
+fun ShopTabSelector(
+    selectedIndex: Int,
+    pendingCount: Int,
+    onTabSelected: (Int) -> Unit
+) {
+    val tabs = listOf("⏳ Pending", "🛍 Items", "📜 History")
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant
+    ) {
+        Row(modifier = Modifier.padding(3.dp)) {
+            tabs.forEachIndexed { index, title ->
+                val isSelected = selectedIndex == index
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(
+                            if (isSelected) MaterialTheme.colorScheme.surface
+                            else Color.Transparent
+                        )
+                        .clickable { onTabSelected(index) }
+                        .padding(vertical = 8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (index == 0 && pendingCount > 0) {
+                        BadgedBox(badge = { Badge { Text(pendingCount.toString()) } }) {
+                            Text(
+                                text = title,
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                color = if (isSelected) MaterialTheme.colorScheme.onSurface
+                                else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    } else {
+                        Text(
+                            text = title,
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                            color = if (isSelected) MaterialTheme.colorScheme.onSurface
+                            else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
         }
@@ -145,37 +241,322 @@ fun ManageShopScreen(
 
 // ============================================================
 // PendingPurchasesList
-// FIX 4: Added fillMaxSize to LazyColumn for bounded height.
 // ============================================================
 @Composable
-fun PendingPurchasesList(purchases: List<PurchaseLogItem>, viewModel: ManageShopViewModel) {
+fun PendingPurchasesList(
+    purchases: List<PurchaseLogItem>,
+    onApprove: (PurchaseLogItem) -> Unit,
+    onRefund: (PurchaseLogItem) -> Unit
+) {
     if (purchases.isEmpty()) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("No pending rewards to approve.")
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("✅", style = MaterialTheme.typography.displaySmall)
+                Spacer(Modifier.height(8.dp))
+                Text("No pending approvals!", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "You're all caught up.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     } else {
         LazyColumn(
-            modifier = Modifier.fillMaxSize(), // ✅ bounded height
-            contentPadding = PaddingValues(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             items(items = purchases, key = { it.id }) { purchase ->
                 PendingPurchaseCard(
                     purchase = purchase,
-                    onApprove = { viewModel.completePurchase(purchase) },
-                    onRefund = { viewModel.refundPurchase(purchase) }
+                    onApprove = { onApprove(purchase) },
+                    onRefund = { onRefund(purchase) }
                 )
             }
         }
     }
 }
 
+@Composable
+fun PendingPurchaseCard(
+    purchase: PurchaseLogItem,
+    onApprove: () -> Unit,
+    onRefund: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(2.dp)
+    ) {
+        Row(modifier = Modifier.fillMaxWidth()) {
+            // Amber left accent bar
+            Box(
+                modifier = Modifier
+                    .width(4.dp)
+                    .fillMaxHeight()
+                    .background(
+                        Color(0xFFF59E0B),
+                        RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp)
+                    )
+            )
+            Column(modifier = Modifier.padding(14.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = Color(0xFFFEF3C7),
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text("🎁", style = MaterialTheme.typography.titleMedium)
+                        }
+                    }
+                    Spacer(Modifier.width(10.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = purchase.itemName,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Requested by ${purchase.purchasedByUserName}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    // Points pill
+                    Surface(
+                        shape = RoundedCornerShape(20.dp),
+                        color = Color(0xFFFEF3C7),
+                        border = BorderStroke(1.dp, Color(0xFFFDE68A))
+                    ) {
+                        Text(
+                            text = "${purchase.itemCost} pts",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFD97706),
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onRefund,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp)
+                    ) { Text("Refund") }
+
+                    Button(
+                        onClick = onApprove,
+                        modifier = Modifier.weight(2f),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1A1A2E))
+                    ) {
+                        Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Approve")
+                    }
+                }
+            }
+        }
+    }
+}
+
 // ============================================================
-// PurchaseHistoryList
-// FIX 4: Added fillMaxSize to LazyColumn.
-// Bonus: Moved "Clear History" button into this tab where it
-// belongs — it was previously wired up outside via a dialog
-// state var but had no trigger button in the UI.
+// ShopItemsList — tap to reveal edit/delete inline
+// ============================================================
+@Composable
+fun ShopItemsList(
+    items: List<ShopItem>,
+    onEditClick: (ShopItem) -> Unit,
+    onDeleteClick: (ShopItem) -> Unit
+) {
+    if (items.isEmpty()) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("🛍", style = MaterialTheme.typography.displaySmall)
+                Spacer(Modifier.height(8.dp))
+                Text("No shop items yet.", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "Press + to add your first reward.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    } else {
+        var expandedItemId by remember { mutableStateOf<String?>(null) }
+        Column(modifier = Modifier.fillMaxSize()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "Shop Items",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f)
+                )
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer
+                ) {
+                    Text(
+                        text = "${items.size} item${if (items.size != 1) "s" else ""}",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+            }
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(items = items, key = { it.id }) { item ->
+                    ShopItemCard(
+                        item = item,
+                        isExpanded = expandedItemId == item.id,
+                        onClick = { expandedItemId = if (expandedItemId == item.id) null else item.id },
+                        onEditClick = { onEditClick(item); expandedItemId = null },
+                        onDeleteClick = { onDeleteClick(item); expandedItemId = null }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ShopItemCard(
+    item: ShopItem,
+    isExpanded: Boolean,
+    onClick: () -> Unit,
+    onEditClick: () -> Unit,
+    onDeleteClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
+        shape = RoundedCornerShape(14.dp),
+        elevation = CardDefaults.cardElevation(if (isExpanded) 4.dp else 1.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.primaryContainer,
+                modifier = Modifier.size(42.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text("🎁", style = MaterialTheme.typography.titleMedium)
+                }
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = item.name,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.padding(top = 4.dp)
+                ) {
+                    Text(
+                        text = "${item.cost} pts",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    if (item.autoRedeem) {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = Color(0xFFF0FDF4),
+                            border = BorderStroke(1.dp, Color(0xFFBBF7D0))
+                        ) {
+                            Text(
+                                "Auto",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF16A34A),
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                    if (item.mysteryText.isNotBlank()) {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = Color(0xFFFAF5FF),
+                            border = BorderStroke(1.dp, Color(0xFFDDD6FE))
+                        ) {
+                            Text(
+                                "Mystery",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF7C3AED),
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                }
+            }
+            // Actions revealed on tap
+            AnimatedVisibility(visible = isExpanded) {
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    IconButton(
+                        onClick = onEditClick,
+                        modifier = Modifier
+                            .size(36.dp)
+                            .background(Color(0xFFE8F0FE), RoundedCornerShape(50))
+                    ) {
+                        Icon(
+                            Icons.Default.Edit,
+                            contentDescription = "Edit",
+                            tint = Color(0xFF3B6BDC),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    IconButton(
+                        onClick = onDeleteClick,
+                        modifier = Modifier
+                            .size(36.dp)
+                            .background(Color(0xFFFEE2E2), RoundedCornerShape(50))
+                    ) {
+                        Icon(
+                            Icons.Default.Delete,
+                            contentDescription = "Delete",
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ============================================================
+// PurchaseHistoryList — colored status chips
 // ============================================================
 @Composable
 fun PurchaseHistoryList(
@@ -184,255 +565,220 @@ fun PurchaseHistoryList(
 ) {
     if (history.isEmpty()) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("No past purchases.")
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("📜", style = MaterialTheme.typography.displaySmall)
+                Spacer(Modifier.height(8.dp))
+                Text("No purchase history yet.", style = MaterialTheme.typography.titleMedium)
+            }
         }
     } else {
         Column(modifier = Modifier.fillMaxSize()) {
-            // Clear history button at the top of the history tab
-            TextButton(
-                onClick = onClearHistory,
-                modifier = Modifier
-                    .align(Alignment.End)
-                    .padding(horizontal = 12.dp, vertical = 4.dp)
-            ) {
-                Icon(
-                    Icons.Default.DeleteSweep,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp)
-                )
-                Spacer(Modifier.width(6.dp))
-                Text("Clear History", color = MaterialTheme.colorScheme.error)
-            }
-
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(), // ✅ bounded height
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
-            ) {
-                items(items = history, key = { it.id }) { purchase ->
-                    PurchaseHistoryItem(purchase = purchase)
-                    HorizontalDivider() // ✅ was missing entirely — added for visual separation
-                }
-            }
-        }
-    }
-}
-
-// ============================================================
-// ShopItemsList
-// FIX 3: Deprecated Divider() → HorizontalDivider()
-// FIX 4: Added fillMaxSize to LazyColumn.
-// FIX 5: Added key = { it.id } for correct list animations.
-// ============================================================
-@Composable
-fun ShopItemsList(items: List<ShopItem>, onLongPress: (ShopItem) -> Unit) {
-    if (items.isEmpty()) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text(
-                "No shop items created yet.\nPress the '+' button to add one.",
-                textAlign = TextAlign.Center
-            )
-        }
-    } else {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(), // ✅ bounded height
-            contentPadding = PaddingValues(12.dp)
-        ) {
-            items(
-                items = items,
-                key = { it.id } // ✅ was missing — needed for correct recomposition
-            ) { item ->
-                ShopItemLogItem(item = item, onLongPress = { onLongPress(item) })
-                HorizontalDivider() // ✅ was Divider() — deprecated in M3
-            }
-        }
-    }
-}
-
-// ============================================================
-// PendingPurchaseCard — no changes needed.
-// ============================================================
-@Composable
-fun PendingPurchaseCard(
-    purchase: PurchaseLogItem,
-    onApprove: () -> Unit,
-    onRefund: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Card(modifier = modifier.fillMaxWidth()) {
-        Column(Modifier.padding(12.dp)) {
-            Text(
-                text = "'${purchase.itemName}' for ${purchase.purchasedByUserName}",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-            Text("${purchase.itemCost} pts", style = MaterialTheme.typography.bodyMedium)
-            Spacer(Modifier.height(8.dp))
             Row(
-                horizontalArrangement = Arrangement.End,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                OutlinedButton(onClick = onRefund, modifier = Modifier.padding(end = 8.dp)) {
-                    Text("Refund")
+                Text(
+                    "Purchase History",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f)
+                )
+                TextButton(
+                    onClick = onClearHistory,
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Icon(Icons.Default.DeleteSweep, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Clear", style = MaterialTheme.typography.labelMedium)
                 }
-                Button(onClick = onApprove) {
-                    Text("Approve")
+            }
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                shape = RoundedCornerShape(16.dp),
+                elevation = CardDefaults.cardElevation(2.dp)
+            ) {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp)
+                ) {
+                    items(items = history, key = { it.id }) { purchase ->
+                        PurchaseHistoryItem(purchase = purchase)
+                        if (purchase != history.last()) HorizontalDivider()
+                    }
                 }
             }
         }
     }
 }
 
-// ============================================================
-// PurchaseHistoryItem — no changes needed.
-// ============================================================
 @Composable
 fun PurchaseHistoryItem(purchase: PurchaseLogItem) {
+    val (chipBg, chipBorder, chipLabel, chipColor) = when (purchase.status) {
+        "completed" -> listOf(Color(0xFFF0FDF4), Color(0xFFBBF7D0), "Approved",  Color(0xFF16A34A))
+        "refunded"  -> listOf(Color(0xFFFEE2E2), Color(0xFFFECACA), "Refunded",  Color(0xFFEF4444))
+        else        -> listOf(Color(0xFFFEF3C7), Color(0xFFFDE68A), purchase.status.replaceFirstChar { it.uppercase() }, Color(0xFFD97706))
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                "'${purchase.itemName}' for ${purchase.purchasedByUserName}",
-                style = MaterialTheme.typography.bodyLarge
+                text = purchase.itemName,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold
             )
             Text(
-                "${purchase.itemCost} pts",
+                text = "${purchase.purchasedByUserName} · ${purchase.itemCost} pts",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-        Text(
-            purchase.status.replaceFirstChar { it.uppercase() },
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Bold,
-            color = when (purchase.status) {
-                "completed" -> MaterialTheme.colorScheme.primary
-                "refunded" -> MaterialTheme.colorScheme.error
-                else -> Color.Unspecified
-            }
-        )
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            color = chipBg as Color,
+            border = BorderStroke(1.dp, chipBorder as Color)
+        ) {
+            Text(
+                text = chipLabel as String,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = chipColor as Color,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+            )
+        }
     }
 }
 
 // ============================================================
-// ShopItemLogItem — no changes needed.
+// ShopItemBottomSheet — replaces EditShopItemDialog
+// ModalBottomSheet + imePadding = keyboard never covers fields
 // ============================================================
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ShopItemLogItem(item: ShopItem, onLongPress: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .pointerInput(Unit) {
-                detectTapGestures(onLongPress = { onLongPress() })
-            }
-            .padding(vertical = 12.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(item.name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-        Text(
-            "${item.cost} pts",
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = FontWeight.Bold
-        )
-    }
-}
-
-// ============================================================
-// EditShopItemDialog
-// FIX 6: OutlinedTextFields now have fillMaxWidth so they
-//         span the full dialog width instead of being narrow.
-// FIX 7: Cost field filters non-numeric input immediately
-//         instead of only failing at validation on confirm.
-// ============================================================
-@Composable
-fun EditShopItemDialog(
+fun ShopItemBottomSheet(
     roomName: String,
-    item: ShopItem,
+    item: ShopItem?,
     onDismiss: () -> Unit,
-    onConfirm: (String, String, String, Boolean) -> Unit,
-    isCreating: Boolean = false,
+    onConfirm: (String, String, String, Boolean) -> Unit
 ) {
-    var editName by remember { mutableStateOf(item.name) }
-    var editCost by remember { mutableStateOf(if (item.cost == 0 && isCreating) "" else item.cost.toString()) }
-    var editMysteryText by remember { mutableStateOf(item.mysteryText) }
-    var editAutoRedeem by remember { mutableStateOf(item.autoRedeem) }
+    val isCreating = item == null
+    var editName        by remember { mutableStateOf(item?.name        ?: "") }
+    var editCost        by remember { mutableStateOf(if (isCreating) "" else item!!.cost.toString()) }
+    var editMysteryText by remember { mutableStateOf(item?.mysteryText  ?: "") }
+    var editAutoRedeem  by remember { mutableStateOf(item?.autoRedeem   ?: false) }
 
-    val isFormValid = editName.isNotBlank() && editCost.toIntOrNull() != null && (editCost.toIntOrNull() ?: 0) > 0
+    val isFormValid = editName.isNotBlank()
+            && editCost.toIntOrNull() != null
+            && (editCost.toIntOrNull() ?: 0) > 0
 
-    AlertDialog(
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
-        title = { Text(if (isCreating) "Add New Item" else "Edit Item") },
-        text = {
-            Column {
-                Text(
-                    "Room: $roomName",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(Modifier.height(12.dp))
+        sheetState = sheetState,
+        containerColor = MaterialTheme.colorScheme.surface
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 32.dp)
+                .imePadding()
+        ) {
+            Text(
+                text = if (isCreating) "Add New Item" else "Edit Item",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.ExtraBold
+            )
+            Text(
+                text = "Room: $roomName",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 2.dp, bottom = 20.dp)
+            )
 
-                // FIX 6: fillMaxWidth so fields span the full dialog width
-                OutlinedTextField(
-                    value = editName,
-                    onValueChange = { editName = it },
-                    label = { Text("Reward Name") },
-                    modifier = Modifier.fillMaxWidth(), // ✅
-                    singleLine = true
-                )
-                Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                value = editName,
+                onValueChange = { editName = it },
+                label = { Text("Reward Name") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                shape = RoundedCornerShape(12.dp)
+            )
+            Spacer(Modifier.height(12.dp))
 
-                OutlinedTextField(
-                    value = editCost,
-                    // FIX 7: Only allow numeric input immediately
-                    onValueChange = { newVal ->
-                        if (newVal.isEmpty() || newVal.all { it.isDigit() }) {
-                            editCost = newVal // ✅ rejects non-numeric characters on input
-                        }
-                    },
-                    label = { Text("Points Cost") },
-                    modifier = Modifier.fillMaxWidth(), // ✅
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    singleLine = true,
-                    // Show an error indicator if the field is non-empty but invalid
-                    isError = editCost.isNotEmpty() && editCost.toIntOrNull() == null
-                )
-                Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                value = editCost,
+                onValueChange = { if (it.isEmpty() || it.all { c -> c.isDigit() }) editCost = it },
+                label = { Text("Points Cost") },
+                modifier = Modifier.fillMaxWidth(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                singleLine = true,
+                isError = editCost.isNotEmpty() && editCost.toIntOrNull() == null,
+                shape = RoundedCornerShape(12.dp)
+            )
+            Spacer(Modifier.height(12.dp))
 
-                OutlinedTextField(
-                    value = editMysteryText,
-                    onValueChange = { editMysteryText = it },
-                    label = { Text("Mystery Text (Optional)") },
-                    modifier = Modifier.fillMaxWidth(), // ✅
-                    singleLine = false,
-                    maxLines = 3
-                )
-                Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                value = editMysteryText,
+                onValueChange = { editMysteryText = it },
+                label = { Text("Mystery Text (Optional)") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = false,
+                maxLines = 3,
+                shape = RoundedCornerShape(12.dp)
+            )
+            Spacer(Modifier.height(8.dp))
 
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Auto Redeem", modifier = Modifier.weight(1f))
-                    Switch(
-                        checked = editAutoRedeem,
-                        onCheckedChange = { editAutoRedeem = it }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp)
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Auto Redeem",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        "Approve automatically when purchased",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+                Switch(checked = editAutoRedeem, onCheckedChange = { editAutoRedeem = it })
             }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { onConfirm(editName, editCost, editMysteryText, editAutoRedeem) },
-                enabled = isFormValid
-            ) { Text("Save") }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp)
+                ) { Text("Cancel") }
+
+                Button(
+                    onClick = { onConfirm(editName, editCost, editMysteryText, editAutoRedeem) },
+                    modifier = Modifier.weight(2f),
+                    enabled = isFormValid,
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1A1A2E))
+                ) { Text("Save Item") }
+            }
         }
-    )
+    }
 }

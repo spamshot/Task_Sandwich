@@ -19,36 +19,6 @@ import androidx.navigation.navArgument
 
 
 
-// Fixes:
-//   1. ManageShopScreen is registered at the CreateShopItem route —
-//      the route is named "create_shop_item_screen" but it actually
-//      opens the full ManageShopScreen (which handles both create
-//      and edit). The route name is misleading. Renamed the Screen
-//      object to ManageShop for clarity.
-//   2. EditTask composable is a placeholder Box with text — this is
-//      fine for development but is easy to forget. Noted with a TODO.
-//   3. RoomDetailScreen passes roomId via both the arguments bundle
-//      AND as a direct parameter — it's extracted from the bundle
-//      manually and re-passed. This is fine but the ViewModel already
-//      gets it from SavedStateHandle, so passing it as a parameter
-//      to the composable is redundant if RoomDetailScreen just passes
-//      it through. Noted with a comment.
-//   4. AppNavHost receives paddingValues from AppShell but AppShell
-//      manually reduces bottom padding to 0.dp. This means bottom
-//      system insets (nav bar) may not be respected on gesture-nav
-//      devices. The proper approach is to pass innerPadding fully
-//      and let the NavHost content handle it. Flagged in AppShell
-//      (see fix in that file).
-//   5. Screen.CreateRoom and Screen.JoinRoom are defined as routes
-//      but are handled as dialog triggers inside AppShell — they
-//      never actually navigate to standalone screens. If a deep link
-//      ever targets these routes, it would crash or show nothing.
-//      Noted with a comment.
-//   6. ManageTasks.arguments is a val on the companion — but the
-//      rest of the Screen objects don't define arguments this way,
-//      creating inconsistency. Minor but noted.
-// ============================================================
-
 sealed class Screen(val route: String) {
     object Splash : Screen("splash_screen")
     object Auth : Screen("auth_screen")
@@ -88,12 +58,14 @@ sealed class Screen(val route: String) {
 @Composable
 fun AppNavHost(
     navController: NavHostController,
-    paddingValues: PaddingValues
+    paddingValues: PaddingValues,
+    onShowCreateRoomDialog: () -> Unit,
+    onShowJoinRoomDialog: () -> Unit
 ) {
     NavHost(
         navController = navController,
         startDestination = Screen.Splash.route,
-        modifier = Modifier.padding(paddingValues)
+        modifier = Modifier // ✅ removed global padding — each screen owns its own insets
     ) {
         composable(Screen.Splash.route) {
             SplashScreen(navController = navController)
@@ -116,11 +88,17 @@ fun AppNavHost(
         }
 
         composable(Screen.Home.route) {
-            HomeScreen(navController = navController)
+            HomeScreen(
+                navController = navController,
+                shellPaddingValues = paddingValues,
+                onShowCreateRoomDialog = onShowCreateRoomDialog,
+                onShowJoinRoomDialog = onShowJoinRoomDialog
+            )
         }
 
         composable(Screen.ProfileSettings.route) {
             ProfileSettingsScreen(
+                onNavigateBack = { navController.popBackStack() },
                 onLogoutSuccess = {
                     navController.navigate(Screen.Auth.route) {
                         popUpTo(navController.graph.id) { inclusive = true }

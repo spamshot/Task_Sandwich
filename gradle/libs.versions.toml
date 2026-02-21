@@ -20,6 +20,9 @@ foundation = "1.10.2"
 playServicesAdsApi = "24.9.0"
 foundationVersion = "1.10.3"
 material3 = "1.4.0"
+animation = "1.10.3"
+uiTextVersion = "1.10.3"
+foundationLayout = "1.10.3"
 #firebaseFunctionsKtx = "22.1.0"
 
 
@@ -49,6 +52,9 @@ androidx-compose-foundation = { group = "androidx.compose.foundation", name = "f
 play-services-ads-api = { group = "com.google.android.gms", name = "play-services-ads-api", version.ref = "playServicesAdsApi" }
 androidx-foundation = { group = "androidx.compose.foundation", name = "foundation", version.ref = "foundationVersion" }
 androidx-material3 = { group = "androidx.compose.material3", name = "material3", version.ref = "material3" }
+androidx-compose-animation = { group = "androidx.compose.animation", name = "animation", version.ref = "animation" }
+androidx-ui-text = { group = "androidx.compose.ui", name = "ui-text", version.ref = "uiTextVersion" }
+androidx-compose-foundation-layout = { group = "androidx.compose.foundation", name = "foundation-layout", version.ref = "foundationLayout" }
 #firebase-functions-ktx = { group = "com.google.firebase", name = "firebase-functions-ktx", version.ref = "firebaseFunctionsKtx" }
 
 [plugins]

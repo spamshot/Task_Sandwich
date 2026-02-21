@@ -80,26 +80,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import kotlin.math.roundToInt
 
 
-// Layout changes:
-//   1. Dark top bar with room name, lock icon, and report icon
-//      — room identity is immediately clear on entry.
-//   2. InfoBox cramped SpaceAround row → full-width RoomStatsCard
-//      with proper breathing room per stat.
-//   3. Admin buttons (Manage Tasks / Manage Shop) moved into
-//      RoomStatsCard so they are always visible, not buried at
-//      the bottom of the leaderboard tab.
-//   4. TabRow → pill-style tab selector (rounded, segmented).
-//   5. "View Room Shop" plain button → gradient banner card.
-//   6. "Leaderboard" plain Text → section header with member
-//      count badge matching HomeScreen style.
-//   7. MemberListItem: action icons hidden by default, revealed
-//      on tap. Keeps rows clean. Long-press still kicks (admin).
-//   8. Medal emojis for top 3 instead of hardcoded resource
-//      colors. Gold card tint for 1st, blue tint for current user.
-//   9. Progress bar added to CompactTaskItem in Top Tasks tab.
-//  10. Fixed both sendReportToFirebase → sendReport calls.
-// ============================================================
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RoomDetailScreen(
@@ -212,32 +192,6 @@ fun RoomDetailScreen(
     }
 
     // Profile dialog
-    if (uiState.selectedUserProfile != null || uiState.isLoadingProfileForDialog) {
-        AlertDialog(
-            onDismissRequest = { viewModel.dismissUserProfileView() },
-            confirmButton = {
-                TextButton(onClick = { viewModel.dismissUserProfileView() }) { Text("Close") }
-            },
-            text = {
-                if (uiState.isLoadingProfileForDialog) {
-                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator()
-                    }
-                } else {
-                    uiState.selectedUserProfile?.let { profile ->
-                        val memberInRoom = uiState.members.find { it.userId == profile.uid }
-                        UserProfileCard(
-                            name = profile.name,
-                            pointsInRoom = memberInRoom?.totalPointsInGroup ?: 0,
-                            totalPoints = profile.totalPoints,
-                            iconId = profile.selectedIconId ?: "avatar_1"
-                        )
-                    }
-                }
-            }
-        )
-    }
-
     LaunchedEffect(uiState.isRoomDeleted) {
         if (uiState.isRoomDeleted) onNavigateBack()
     }
@@ -259,7 +213,7 @@ fun RoomDetailScreen(
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            imageVector = Icons.Default.ArrowBack,
                             contentDescription = "Back",
                             tint = Color.White
                         )
@@ -325,7 +279,6 @@ fun RoomDetailScreen(
                             uiState = uiState,
                             onViewShopClick = onViewShopClick,
                             onMemberLongPress = { memberToKick = it },
-                            onMemberClick = { viewModel.selectUserForProfileView(it.userId) },
                             onMemberReportClick = { memberToReport = it },
                             onMemberCensorGlobal = { memberToCensorGlobal = it },
                             onMemberCensorLocal = { memberToCensorLocal = it }
@@ -503,7 +456,6 @@ fun LeaderboardTabContent(
     uiState: RoomDetailUiState,
     onViewShopClick: () -> Unit,
     onMemberLongPress: (RoomMember) -> Unit,
-    onMemberClick: (RoomMember) -> Unit,
     onMemberReportClick: (RoomMember) -> Unit,
     onMemberCensorGlobal: (RoomMember) -> Unit,
     onMemberCensorLocal: (RoomMember) -> Unit
@@ -588,7 +540,6 @@ fun LeaderboardTabContent(
                     onLongPress = {
                         if (uiState.isAdmin && member.userId != uiState.currentUserId) onMemberLongPress(member)
                     },
-                    onClick = { onMemberClick(member) },
                     onReportClick = { onMemberReportClick(member) },
                     onCensorGlobalClick = { onMemberCensorGlobal(member) },
                     onCensorLocalClick = { onMemberCensorLocal(member) }
@@ -613,7 +564,6 @@ fun MemberListItem(
     isGloballyCensored: Boolean,
     isLocallyCensored: Boolean,
     onLongPress: () -> Unit,
-    onClick: () -> Unit,
     onReportClick: () -> Unit,
     onCensorGlobalClick: () -> Unit,
     onCensorLocalClick: () -> Unit
@@ -652,11 +602,7 @@ fun MemberListItem(
                 shape = RoundedCornerShape(14.dp)
             )
             .combinedClickable(
-                onClick = {
-                    // Tap toggles actions for other users; tapping self opens profile
-                    if (isCurrentUser) onClick()
-                    else actionsVisible = !actionsVisible
-                },
+                onClick = { actionsVisible = !actionsVisible },
                 onLongClick = onLongPress
             ),
         colors = CardDefaults.cardColors(containerColor = cardColor),

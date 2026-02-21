@@ -22,42 +22,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 
 
-// Fixes:
-//   1. LaunchedEffect(uiState.newlyCreatedRoomId, uiState.newlyJoinedRoomId)
-//      — both keys are checked inside a single LaunchedEffect block.
-//      If both become non-null simultaneously, only the first branch
-//      executes (the second let is unreachable in the same composition).
-//      Split into two separate LaunchedEffects so each reacts
-//      independently to its own key.
-//   2. Bottom padding is manually forced to 0.dp, breaking insets
-//      on gesture-navigation devices where the nav bar overlaps
-//      the bottom of the content. Passed the full innerPadding
-//      instead. The previous comment "Manually reduced bottom
-//      padding" was masking this bug.
-//   3. showJoinRoomDialog uses derivedStateOf to observe uiState.error
-//      — but `error` is a plain StateFlow value read inside a
-//      composable via collectAsState, so derivedStateOf adds no
-//      benefit here. Removed the unnecessary wrapping.
-//   4. The Create Room dialog calls appShellViewModel.createRoom()
-//      and immediately sets showCreateRoomDialog = false, meaning
-//      the dialog closes before any ViewModel error (e.g. limit
-//      reached) can be shown inside the dialog. The limit check is
-//      done client-side via canCreateRoom, which prevents the button
-//      from being enabled — so this is actually fine for now. Noted.
-//   5. NavDrawerItem.icon uses Any type — accepting either ImageVector
-//      or Int resource ID. This loses type safety. Noted with a
-//      comment; a sealed class would be cleaner but is a larger refactor.
-//   6. currentScreenTitle uses == on route strings that contain
-//      argument placeholders (e.g. "room_detail_screen/{roomId}") —
-//      the actual current route for a specific room will be
-//      "room_detail_screen/abc123", not the template. These
-//      comparisons will never match. Fixed to use startsWith()
-//      for parameterized routes.
-//   7. Drawer item navigation uses popUpTo(startDestinationId)
-//      without saveState/restoreState — this means state is lost
-//      when switching tabs. Added saveState and restoreState.
-// ============================================================
-
 data class NavDrawerItem(
     val route: String,
     val label: String,
@@ -140,24 +104,30 @@ fun AppShell(
     }
 
     if (showJoinRoomDialog) {
-        // FIX 3: Removed derivedStateOf — uiState.error is already a State value
-        // from collectAsState(). derivedStateOf is only useful for derived computations,
-        // not for aliasing an existing state value.
+        // joinCode state hoisted here so the TextField can read and update it
+        var joinCode by remember { mutableStateOf("") }
         val error = uiState.error
 
         AlertDialog(
             onDismissRequest = {
                 showJoinRoomDialog = false
+                joinCode = ""
                 appShellViewModel.clearError()
             },
             title = { Text("Join a Room") },
             text = {
                 Column {
                     OutlinedTextField(
-                        value = remember { mutableStateOf("") }.value,
-                        onValueChange = { /* handled below */ },
+                        value = joinCode,
+                        onValueChange = { input ->
+                            // Only allow digits, max 6 characters
+                            if (input.all { it.isDigit() } && input.length <= 6) {
+                                joinCode = input
+                            }
+                        },
                         label = { Text("6-Digit Code") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true,
                         isError = error != null
                     )
                     error?.let {
@@ -167,14 +137,15 @@ fun AppShell(
                 }
             },
             confirmButton = {
-                // Note: joinCode state needs to be hoisted properly here —
-                // the original had a local `joinCode` var which is the correct approach.
-                // Keeping structure intact; see original for the full joinCode state.
-                TextButton(onClick = { /* appShellViewModel.joinRoom(joinCode) */ }) { Text("Join") }
+                TextButton(
+                    onClick = { appShellViewModel.joinRoom(joinCode) },
+                    enabled = joinCode.length == 6
+                ) { Text("Join") }
             },
             dismissButton = {
                 TextButton(onClick = {
                     showJoinRoomDialog = false
+                    joinCode = ""
                     appShellViewModel.clearError()
                 }) { Text("Cancel") }
             }
@@ -219,6 +190,8 @@ fun AppShell(
         "create_shop_item_screen/",
         "edit_task_screen/"
     ).any { currentRoute?.startsWith(it) == true }
+            || currentRoute == Screen.ManageSelfTasks.route
+            || currentRoute == Screen.ProfileSettings.route
 
     val showShellTopBar = currentRoute !in noShellRoutes && !hasOwnTopBar
     val showDrawerGesture = currentRoute !in noShellRoutes && !hasOwnTopBar
@@ -280,10 +253,9 @@ fun AppShell(
         ) { innerPadding ->
             AppNavHost(
                 navController = navController,
-                // FIX 2: Pass the full innerPadding — manually zeroing bottom padding
-                // breaks insets on gesture-navigation devices where the nav bar
-                // overlaps content at the bottom of the screen.
-                paddingValues = innerPadding // ✅ was: PaddingValues(top = ..., bottom = 0.dp)
+                paddingValues = innerPadding,
+                onShowCreateRoomDialog = { showCreateRoomDialog = true },
+                onShowJoinRoomDialog = { showJoinRoomDialog = true }
             )
         }
     }

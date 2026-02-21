@@ -43,24 +43,13 @@ import com.google.firebase.Timestamp
 import java.util.concurrent.TimeUnit
 
 
-// Changes from original:
-//   1. MyRoomGroup replaced with RoomsRow — horizontal LazyRow
-//      of compact chips. Saves vertical space, rooms are glanceable.
-//   2. Removed heavy Spacer+Divider+Spacer between sections.
-//   3. HomeDashboard is now a single LazyColumn (no nested scroll).
-//   4. Greeting header with user name and task count summary.
-//   5. TaskItem Done button uses theme colors (dark mode safe).
-//   6. Points badge uses secondaryContainer for visible pill.
-//   7. RoomChip padding 8dp -> 14dp, shows admin crown emoji.
-//   8. EmptyStateProfile now has real action buttons.
-//   9. Expired timer gets a red error chip instead of plain text.
-//  10. AssignerTaskGroup header shows task count badge.
-// ============================================================
-
 @Composable
 fun HomeScreen(
     navController: NavController,
-    homeViewModel: HomeViewModel = viewModel()
+    homeViewModel: HomeViewModel = viewModel(),
+    shellPaddingValues: PaddingValues = PaddingValues(),
+    onShowCreateRoomDialog: () -> Unit = {},
+    onShowJoinRoomDialog: () -> Unit = {}
 ) {
     val uiState by homeViewModel.uiState.collectAsState()
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -108,7 +97,10 @@ fun HomeScreen(
     }
 
     Scaffold(snackbarHost = { SnackbarHost(snackbarHostState) }) { scaffoldPadding ->
-        Surface(modifier = Modifier.fillMaxSize().padding(scaffoldPadding)) {
+        Surface(modifier = Modifier.fillMaxSize()
+            .padding(top = shellPaddingValues.calculateTopPadding())
+            .padding(bottom = maxOf(scaffoldPadding.calculateBottomPadding(), shellPaddingValues.calculateBottomPadding()))
+        ) {
             when {
                 uiState.isLoading -> {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -119,8 +111,8 @@ fun HomeScreen(
                     EmptyStateProfile(
                         userProfile = uiState.userProfile,
                         onAddTaskClick = { navController.navigate(Screen.ManageSelfTasks.route) },
-                        onJoinRoomClick = { navController.navigate(Screen.JoinRoom.route) },
-                        onCreateRoomClick = { homeViewModel.createRoom("My New Room") }
+                        onJoinRoomClick = { onShowJoinRoomDialog() },
+                        onCreateRoomClick = { onShowCreateRoomDialog() }
                     )
                 }
                 else -> {
@@ -155,7 +147,7 @@ fun HomeDashboard(
     ) {
         // Greeting
         item {
-            Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 0.dp, bottom = 8.dp)) {
+            Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 8.dp)) {
                 Text(
                     text = "Hey, $firstName",
                     style = MaterialTheme.typography.headlineSmall,
@@ -267,14 +259,14 @@ fun RoomsRow(
                 modifier = Modifier.weight(1f)
             )
             Surface(
-                shape = MaterialTheme.shapes.extraSmall,
-                color = Color(0xFFE0F7F4)
+                shape = RoundedCornerShape(8.dp),
+                color = MaterialTheme.colorScheme.primaryContainer
             ) {
                 Text(
                     text = "${rooms.size}",
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF0A9E89),
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                 )
             }
@@ -310,12 +302,12 @@ fun RoomChip(
     val containerColor = if (room.isAdmin)
         MaterialTheme.colorScheme.primaryContainer
     else
-        Color(0xFFF0F0F0)
+        MaterialTheme.colorScheme.surfaceVariant
 
     val contentColor = if (room.isAdmin)
         MaterialTheme.colorScheme.onPrimaryContainer
     else
-        Color(0xFF444444)
+        MaterialTheme.colorScheme.onSurfaceVariant
 
     Card(
         modifier = Modifier
@@ -427,7 +419,7 @@ fun AssignerTaskGroup(
             if (isExpanded) {
                 Column(
                     modifier = Modifier
-                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
+                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.07f))
                         .padding(horizontal = 12.dp, vertical = 10.dp)
                         .fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -488,8 +480,8 @@ fun TaskItem(task: Task, onCompleteClick: () -> Unit) {
                 modifier = Modifier.height(36.dp),
                 contentPadding = PaddingValues(horizontal = 16.dp),
                 colors = ButtonDefaults.filledTonalButtonColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary
+                    containerColor = Color(0xFF1A1A2E),
+                    contentColor = Color.White
                 )
             ) {
                 Text("Done", style = MaterialTheme.typography.labelMedium)
@@ -579,7 +571,8 @@ fun EmptyStateProfile(
         Text("Get started", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(16.dp))
         Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Button(onClick = onAddTaskClick, modifier = Modifier.fillMaxWidth()) {
+            Button(onClick = onAddTaskClick, modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1A1A2E))) {
                 Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
                 Text("Add a personal task")
@@ -607,12 +600,3 @@ private fun formatDuration(now: Long, future: Long): String {
         else -> "< 1m left"
     }
 }
-
-
-//-Admin
-//fake3@gmail.com
-//Password123!!!
-
-//New User
-//fake88@gmail.com
-//Password123!!!
